@@ -20,6 +20,33 @@ function FENtoBoard(fen)
   return board;
 }
 
+function BoardToFEN(board)
+{
+  let fen = "";
+  let ctr = 0;
+  for(let r = 0;r < 8;r ++)
+  {
+    for(let c = 0;c < 8;c ++)
+    {
+      if(board[r][c] == " ")
+        ctr += 1;
+      if(board[r][c] != " " || c == 7)
+      {
+        if(ctr > 0)
+        {
+          fen += ctr;
+          ctr = 0;
+        }
+        if(board[r][c] != " ")
+          fen += board[r][c];
+      }
+    }
+    if(r != 7)
+      fen += "/";
+  }
+  return fen;
+}
+
 class Board
 {
   constructor(pieces_img)
@@ -53,6 +80,7 @@ class Board
     this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
 
     this.board = FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+    this.active = "";
   }
 
   draw()
@@ -110,7 +138,16 @@ class Board
     let row = Math.floor(map(posY, -(this.board_width / 2), (this.board_width / 2), 0, 8));
     if(row >=0 && row < 8 && col >= 0 && col < 8)
     {
-      print(this.colMap[col] + this.rowMap[row]);
+      if(this.active == "")
+      {
+        this.active = [row, col];
+      }
+      else
+      {
+        this.board[row][col] = this.board[this.active[0]][this.active[1]];
+        this.board[this.active[0]][this.active[1]] = " ";
+        this.active = "";
+      }
     }
   }
 }

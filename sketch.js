@@ -21,7 +21,6 @@ function draw()
 {
   translate(cx, cy);
   board.draw();
-  noLoop();
 }
 
 function mouseClicked()
