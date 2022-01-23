@@ -1,2 +1,2 @@
 # Chess-Board-Online
-Multiplayer Chess
+Multiplayer Chess that two players can play over LAN.
