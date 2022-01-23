@@ -55,10 +55,15 @@ class Board
     this.cell_width = this.board_width / 8;
     this.text_cell_buff = 5;
     this.text_size = 24;
+    this.valid_circle_diam = 35;
+    this.target_ring_width = 8;
     this.color_green = color(119, 150, 87);
     this.color_white = color(238, 239, 211);
     this.color_black = color(38, 36, 34);
     this.color_grey_dark = color(49, 46, 43);
+    this.color_active_green = color(186,202,42);
+    this.color_active_white = color(246,246,106);
+    this.color_valid = color(100, 100, 100, 50);
     this.player = 'white';
     if(this.player == 'white')
     {
@@ -80,7 +85,9 @@ class Board
     this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
 
     this.board = FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-    this.active = "";
+    this.active_cell = "";
+    this.valid_cells = [];
+    this.target_cells = [];
   }
 
   draw()
@@ -98,6 +105,13 @@ class Board
           fill(this.color_green);
         else
           fill(this.color_white);
+        if(this.active_cell != "" && this.active_cell[0] == row && this.active_cell[1] == col)
+        {
+          if((row + col) % 2)
+            fill(this.color_active_green);
+          else
+            fill(this.color_active_white);
+        }
         let cx = map(col, 0, 8, -(this.board_width / 2), (this.board_width / 2));
         let cy = map(row, 0, 8, -(this.board_width / 2), (this.board_width / 2));
         if(row == 0 && col == 0)
@@ -115,6 +129,13 @@ class Board
           fill(this.color_white);
         else
           fill(this.color_green);
+        if(this.active_cell != "" && this.active_cell[0] == row && this.active_cell[1] == col)
+        {
+          if((row + col) % 2)
+            fill(this.color_active_white);
+          else
+            fill(this.color_active_green);
+        }
         if(row == 7)
         {
           textAlign(RIGHT, BOTTOM);
@@ -129,7 +150,29 @@ class Board
         if(this.board[row][col] != " ")
           image(this.pieces_img[this.piecesMap[this.board[row][col]]], cx + this.pieces_offset, cy + this.pieces_offset);
       }
-    };
+    }
+    // valid moves
+    fill(this.color_valid);
+    for(let i = 0;i < this.valid_cells.length;i ++)
+    {
+      let row = this.valid_cells[i][0];
+      let col = this.valid_cells[i][1];
+      let cx = map(col, 0, 8, -(this.board_width / 2), (this.board_width / 2));
+      let cy = map(row, 0, 8, -(this.board_width / 2), (this.board_width / 2));
+      circle(cx + (this.cell_width / 2), cy + (this.cell_width / 2), this.valid_circle_diam);
+    }
+    // target moves
+    noFill();
+    strokeWeight(this.target_ring_width);
+    stroke(this.color_valid);
+    for(let i = 0;i < this.target_cells.length;i ++)
+    {
+      let row = this.target_cells[i][0];
+      let col = this.target_cells[i][1];
+      let cx = map(col, 0, 8, -(this.board_width / 2), (this.board_width / 2));
+      let cy = map(row, 0, 8, -(this.board_width / 2), (this.board_width / 2));
+      circle(cx + (this.cell_width / 2), cy + (this.cell_width / 2), this.cell_width - this.target_ring_width);
+    }
   }
 
   click(posX, posY)
@@ -138,16 +181,39 @@ class Board
     let row = Math.floor(map(posY, -(this.board_width / 2), (this.board_width / 2), 0, 8));
     if(row >=0 && row < 8 && col >= 0 && col < 8)
     {
-      if(this.active == "")
+      if(this.active_cell == "" && this.board[row][col] != " ")
       {
-        this.active = [row, col];
+        this.active_cell = [row, col];
+        this.calculateValidMoves(row, col);
       }
       else
       {
-        this.board[row][col] = this.board[this.active[0]][this.active[1]];
-        this.board[this.active[0]][this.active[1]] = " ";
-        this.active = "";
+        let isValid = false;
+        for(let i = 0;i < this.valid_cells.length;i ++)
+        {
+          if(this.valid_cells[i][0] == row && this.valid_cells[i][1] == col)
+            isValid = true;
+        }
+        for(let i = 0;i < this.target_cells.length;i ++)
+        {
+          if(this.target_cells[i][0] == row && this.target_cells[i][1] == col)
+            isValid = true;
+        }
+        if(isValid)
+        {
+          this.board[row][col] = this.board[this.active_cell[0]][this.active_cell[1]];
+          this.board[this.active_cell[0]][this.active_cell[1]] = " ";
+        }
+        this.active_cell = "";
+        this.valid_cells = [];
+        this.target_cells = [];
       }
     }
+  }
+
+  calculateValidMoves(row, col)
+  {
+    this.valid_cells = [[3, 4], [3, 5]];
+    this.target_cells = [[3, 6], [3, 7]];
   }
 }

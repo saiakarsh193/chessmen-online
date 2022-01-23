@@ -1,4 +1,10 @@
 from flask import Flask, render_template
+import signal
+ 
+def handler(signum, frame):
+    exit(0)
+ 
+signal.signal(signal.SIGINT, handler)
 
 app = Flask(__name__)
 
