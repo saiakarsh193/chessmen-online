@@ -1,6 +1,28 @@
+function FENtoBoard(fen)
+{
+  let sfen = fen.split(" ");
+  let mfen = sfen[0].split("/");
+  let board = [];
+  for(let r = 0;r < 8;r ++)
+  {
+    board.push([]);
+    for(let i = 0;i < mfen[r].length;i ++)
+    {
+      if(! isNaN(mfen[r][i]))
+      {
+        for(let j = 0;j < Number(mfen[r][i]);j ++)
+          board[r].push(" ")
+      }
+      else
+        board[r].push(mfen[r][i]);
+    }
+  }
+  return board;
+}
+
 class Board
 {
-  constructor()
+  constructor(pieces_img)
   {
     this.board_width = 800;
     this.cell_width = this.board_width / 8;
@@ -21,6 +43,16 @@ class Board
       this.rowMap = [1, 2, 3, 4, 5, 6, 7, 8];
       this.colMap = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
     }
+    this.pieces_img = pieces_img;
+    this.pieces_scale = 0.8;
+    this.pieces_offset = 8;
+    this.pieces_img.forEach((img) => 
+    {
+      img.resize(this.cell_width * this.pieces_scale, this.cell_width * this.pieces_scale);
+    });
+    this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
+
+    this.board = FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
   }
 
   draw()
@@ -65,8 +97,11 @@ class Board
           textAlign(LEFT, TOP);
           text(this.rowMap[row], cx + this.text_cell_buff, cy + this.text_cell_buff);
         }
+        // pieces
+        if(this.board[row][col] != " ")
+          image(this.pieces_img[this.piecesMap[this.board[row][col]]], cx + this.pieces_offset, cy + this.pieces_offset);
       }
-    }
+    };
   }
 
   click(posX, posY)
