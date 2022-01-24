@@ -1,11 +1,11 @@
 let cx, cy;
 let board;
 let pieces_img;
+let img_sheet;
 
 function preload()
 {
-  let imp = "/static/pieces/";
-  pieces_img = [loadImage(imp + "P.png"), loadImage(imp + "R.png"), loadImage(imp + "N.png"), loadImage(imp + "B.png"), loadImage(imp + "Q.png"), loadImage(imp + "K.png"), loadImage(imp + "p.png"), loadImage(imp + "r.png"), loadImage(imp + "n.png"), loadImage(imp + "b.png"), loadImage(imp + "q.png"), loadImage(imp + "k.png")];
+  img_sheet = loadImage("/static/piece_sheet.png");
 }
 
 function setup()
@@ -14,6 +14,21 @@ function setup()
 
   cx = width / 2;
   cy = height / 2;
+
+  pieces_img = [
+    img_sheet.get(  0, 312, 119, 141), // P
+    img_sheet.get(  0, 450, 119, 141), // R
+    img_sheet.get(149, 450, 119, 141), // N
+    img_sheet.get(297, 450, 119, 141), // B
+    img_sheet.get(452, 450, 119, 141), // Q
+    img_sheet.get(601, 450, 119, 141), // K
+    img_sheet.get(  0, 160, 119, 141), // p
+    img_sheet.get(  0,   0, 119, 141), // r
+    img_sheet.get(149,   0, 119, 141), // n
+    img_sheet.get(297,   0, 119, 141), // b
+    img_sheet.get(452,   0, 119, 141), // q
+    img_sheet.get(601,   0, 119, 141)  // k
+  ];
 
   board = new Board(pieces_img);
 }

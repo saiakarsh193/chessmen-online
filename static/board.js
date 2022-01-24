@@ -54,7 +54,7 @@ class Board
     this.board_width = 800;
     this.cell_width = this.board_width / 8;
     this.text_cell_buff = 5;
-    this.text_size = 24;
+    this.text_size = 22;
     this.valid_circle_diam = 35;
     this.target_ring_width = 8;
 
@@ -64,14 +64,15 @@ class Board
     this.color_grey_dark = color(49, 46, 43);
     this.color_active_green = color(186,202,42);
     this.color_active_white = color(246,246,106);
-    this.color_valid = color(100, 100, 100, 65);
+    this.color_valid = color(100, 100, 100, 80);
     
     this.pieces_img = pieces_img;
-    this.pieces_scale = 0.8;
-    this.pieces_offset = 8;
+    this.pieces_scale = 0.68;
+    this.pieces_offset_x = 9;
+    this.pieces_offset_y = 4;
     this.pieces_img.forEach((img) => 
     {
-      img.resize(this.cell_width * this.pieces_scale, this.cell_width * this.pieces_scale);
+      img.resize(img.width * this.pieces_scale, img.height * this.pieces_scale);
     });
     this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
 
@@ -131,13 +132,13 @@ class Board
         let cx = map(col, 0, 8, -(this.board_width / 2), (this.board_width / 2));
         let cy = map(row, 0, 8, -(this.board_width / 2), (this.board_width / 2));
         if(row == 0 && col == 0)
-          square(cx, cy, this.cell_width, 10, 0, 0, 0);
+          square(cx, cy, this.cell_width, 5, 0, 0, 0);
         else if(row == 0 && col == 7)
-          square(cx, cy, this.cell_width, 0, 10, 0, 0);
+          square(cx, cy, this.cell_width, 0, 5, 0, 0);
         else if(row == 7 && col == 7)
-          square(cx, cy, this.cell_width, 0, 0, 10, 0);
+          square(cx, cy, this.cell_width, 0, 0, 5, 0);
         else if(row == 7 && col == 0)
-          square(cx, cy, this.cell_width, 0, 0, 0, 10);
+          square(cx, cy, this.cell_width, 0, 0, 0, 5);
         else
           square(cx, cy, this.cell_width);
         // letters
@@ -164,7 +165,7 @@ class Board
         }
         // pieces
         if(this.board[row][col] != " ")
-          image(this.pieces_img[this.piecesMap[this.board[row][col]]], cx + this.pieces_offset, cy + this.pieces_offset);
+          image(this.pieces_img[this.piecesMap[this.board[row][col]]], cx + this.pieces_offset_x, cy + this.pieces_offset_y);
       }
     }
     // valid moves
