@@ -57,14 +57,43 @@ class Board
     this.text_size = 24;
     this.valid_circle_diam = 35;
     this.target_ring_width = 8;
+
     this.color_green = color(119, 150, 87);
     this.color_white = color(238, 239, 211);
     this.color_black = color(38, 36, 34);
     this.color_grey_dark = color(49, 46, 43);
     this.color_active_green = color(186,202,42);
     this.color_active_white = color(246,246,106);
-    this.color_valid = color(100, 100, 100, 50);
-    this.player = 'white';
+    this.color_valid = color(100, 100, 100, 65);
+    
+    this.pieces_img = pieces_img;
+    this.pieces_scale = 0.8;
+    this.pieces_offset = 8;
+    this.pieces_img.forEach((img) => 
+    {
+      img.resize(this.cell_width * this.pieces_scale, this.cell_width * this.pieces_scale);
+    });
+    this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
+
+    this.active_cell = "";
+    this.valid_cells = [];
+    this.target_cells = [];
+
+    this.player = "";
+    // this.cfen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+    this.cfen = "RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr";
+    this.board = [];
+    this.changePlayer();
+  }
+
+  changePlayer()
+  {
+    if(this.player == 'white')
+      this.player = 'black';
+    else
+      this.player = 'white';
+    this.cfen = this.cfen.split("").reverse().join("")
+    this.board = FENtoBoard(this.cfen);
     if(this.player == 'white')
     {
       this.rowMap = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -75,19 +104,6 @@ class Board
       this.rowMap = [1, 2, 3, 4, 5, 6, 7, 8];
       this.colMap = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
     }
-    this.pieces_img = pieces_img;
-    this.pieces_scale = 0.8;
-    this.pieces_offset = 8;
-    this.pieces_img.forEach((img) => 
-    {
-      img.resize(this.cell_width * this.pieces_scale, this.cell_width * this.pieces_scale);
-    });
-    this.piecesMap = {"P": 0, "R": 1, "N": 2, "B": 3, "Q": 4, "K": 5, "p": 6, "r": 7, "n": 8, "b": 9, "q": 10, "k": 11};
-
-    this.board = FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-    this.active_cell = "";
-    this.valid_cells = [];
-    this.target_cells = [];
   }
 
   draw()
@@ -181,39 +197,348 @@ class Board
     let row = Math.floor(map(posY, -(this.board_width / 2), (this.board_width / 2), 0, 8));
     if(row >=0 && row < 8 && col >= 0 && col < 8)
     {
-      if(this.active_cell == "" && this.board[row][col] != " ")
+      if(this.isValidMove(row, col))
       {
-        this.active_cell = [row, col];
-        this.calculateValidMoves(row, col);
+        this.board[row][col] = this.board[this.active_cell[0]][this.active_cell[1]];
+        this.board[this.active_cell[0]][this.active_cell[1]] = " ";
+        this.cfen = BoardToFEN(this.board);
+        this.changePlayer();
+        this.valid_cells = [];
+        this.target_cells = [];
+        this.active_cell = "";
       }
       else
       {
-        let isValid = false;
-        for(let i = 0;i < this.valid_cells.length;i ++)
-        {
-          if(this.valid_cells[i][0] == row && this.valid_cells[i][1] == col)
-            isValid = true;
-        }
-        for(let i = 0;i < this.target_cells.length;i ++)
-        {
-          if(this.target_cells[i][0] == row && this.target_cells[i][1] == col)
-            isValid = true;
-        }
-        if(isValid)
-        {
-          this.board[row][col] = this.board[this.active_cell[0]][this.active_cell[1]];
-          this.board[this.active_cell[0]][this.active_cell[1]] = " ";
-        }
-        this.active_cell = "";
         this.valid_cells = [];
         this.target_cells = [];
+        if(this.board[row][col] != " " && this.player == this.colorOf(this.board[row][col]))
+        {
+          this.active_cell = [row, col];
+          this.calculateValidMoves(row, col);
+        }
+        else
+          this.active_cell = "";
       }
     }
   }
 
+  isValidMove(row, col)
+  {
+    let isValid = false;
+    for(let i = 0;i < this.valid_cells.length;i ++)
+    {
+      if(this.valid_cells[i][0] == row && this.valid_cells[i][1] == col)
+        isValid = true;
+    }
+    for(let i = 0;i < this.target_cells.length;i ++)
+    {
+      if(this.target_cells[i][0] == row && this.target_cells[i][1] == col)
+        isValid = true;
+    }
+    return isValid;
+  }
+
   calculateValidMoves(row, col)
   {
-    this.valid_cells = [[3, 4], [3, 5]];
-    this.target_cells = [[3, 6], [3, 7]];
+    let ptr = this.pAt(row, col);
+    let pty = ptr.toLowerCase();
+    // pawn moves
+    if(pty == "p")
+    {
+      if(this.pAt(row - 1, col) == " ")
+        this.valid_cells.push([row - 1, col]);
+      if(this.pAt(row - 2, col) == " " && row == 6)
+        this.valid_cells.push([row - 2, col]);
+      if(this.areOpposite(this.pAt(row - 1, col - 1), ptr))
+        this.target_cells.push([row - 1, col - 1]);
+      if(this.areOpposite(this.pAt(row - 1, col + 1), ptr))
+        this.target_cells.push([row - 1, col + 1]);
+    }
+    //king moves
+    if(pty == 'k')
+    {
+      if(this.pAt(row - 1, col - 1) == " ")
+        this.valid_cells.push([row - 1, col - 1]);
+      else if(this.areOpposite(this.pAt(row - 1, col - 1), ptr))
+        this.target_cells.push([row - 1, col - 1]);
+      if(this.pAt(row - 1, col) == " ")
+        this.valid_cells.push([row - 1, col]);
+      else if(this.areOpposite(this.pAt(row - 1, col), ptr))
+        this.target_cells.push([row - 1, col]);
+      if(this.pAt(row - 1, col + 1) == " ")
+        this.valid_cells.push([row - 1, col + 1]);
+      else if(this.areOpposite(this.pAt(row - 1, col + 1), ptr))
+        this.target_cells.push([row - 1, col + 1]);
+      if(this.pAt(row, col - 1) == " ")
+        this.valid_cells.push([row, col - 1]);
+      else if(this.areOpposite(this.pAt(row, col - 1), ptr))
+        this.target_cells.push([row, col - 1]);
+      if(this.pAt(row, col + 1) == " ")
+        this.valid_cells.push([row, col + 1]);
+      else if(this.areOpposite(this.pAt(row, col + 1), ptr))
+        this.target_cells.push([row, col + 1]);
+      if(this.pAt(row + 1, col - 1) == " ")
+        this.valid_cells.push([row + 1, col - 1]);
+      else if(this.areOpposite(this.pAt(row + 1, col - 1), ptr))
+        this.target_cells.push([row + 1, col - 1]);
+      if(this.pAt(row + 1, col) == " ")
+        this.valid_cells.push([row + 1, col]);
+      else if(this.areOpposite(this.pAt(row + 1, col), ptr))
+        this.target_cells.push([row + 1, col]);
+      if(this.pAt(row + 1, col + 1) == " ")
+        this.valid_cells.push([row + 1, col + 1]);
+      else if(this.areOpposite(this.pAt(row + 1, col + 1), ptr))
+        this.target_cells.push([row + 1, col + 1]);
+    }
+    // rook moves
+    if(pty == 'r')
+    {
+      for(let i = row + 1;i < row + 8;i ++)
+      {
+        if(this.pAt(i, col) == " ")
+          this.valid_cells.push([i, col]);
+        else
+        {
+          if(this.areOpposite(this.pAt(i, col), ptr))
+            this.target_cells.push([i, col]);
+          break;
+        }
+      }
+      for(let i = row - 1;i >= row - 7;i --)
+      {
+        if(this.pAt(i, col) == " ")
+          this.valid_cells.push([i, col]);
+        else
+        {
+          if(this.areOpposite(this.pAt(i, col), ptr))
+            this.target_cells.push([i, col]);
+          break;
+        }
+      }
+      for(let j = col + 1;j < col + 8;j ++)
+      {
+        if(this.pAt(row, j) == " ")
+          this.valid_cells.push([row, j]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row, j), ptr))
+            this.target_cells.push([row, j]);
+          break;
+        }
+      }
+      for(let j = col - 1;j >= col - 7;j --)
+      {
+        if(this.pAt(row, j) == " ")
+          this.valid_cells.push([row, j]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row, j), ptr))
+            this.target_cells.push([row, j]);
+          break;
+        }
+      }
+    }
+    // bishop moves
+    if(pty == 'b')
+    {
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row + i, col + i) == " ")
+          this.valid_cells.push([row + i, col + i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row + i, col + i), ptr))
+            this.target_cells.push([row + i, col + i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row - i, col + i) == " ")
+          this.valid_cells.push([row - i, col + i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row - i, col + i), ptr))
+            this.target_cells.push([row - i, col + i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row - i, col - i) == " ")
+          this.valid_cells.push([row - i, col - i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row - i, col - i), ptr))
+            this.target_cells.push([row - i, col - i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row + i, col - i) == " ")
+          this.valid_cells.push([row + i, col - i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row + i, col - i), ptr))
+            this.target_cells.push([row + i, col - i]);
+          break;
+        }
+      }
+    }
+    // queen moves
+    if(pty == 'q')
+    {
+      for(let i = row + 1;i < row + 8;i ++)
+      {
+        if(this.pAt(i, col) == " ")
+          this.valid_cells.push([i, col]);
+        else
+        {
+          if(this.areOpposite(this.pAt(i, col), ptr))
+            this.target_cells.push([i, col]);
+          break;
+        }
+      }
+      for(let i = row - 1;i >= row - 7;i --)
+      {
+        if(this.pAt(i, col) == " ")
+          this.valid_cells.push([i, col]);
+        else
+        {
+          if(this.areOpposite(this.pAt(i, col), ptr))
+            this.target_cells.push([i, col]);
+          break;
+        }
+      }
+      for(let j = col + 1;j < col + 8;j ++)
+      {
+        if(this.pAt(row, j) == " ")
+          this.valid_cells.push([row, j]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row, j), ptr))
+            this.target_cells.push([row, j]);
+          break;
+        }
+      }
+      for(let j = col - 1;j >= col - 7;j --)
+      {
+        if(this.pAt(row, j) == " ")
+          this.valid_cells.push([row, j]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row, j), ptr))
+            this.target_cells.push([row, j]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row + i, col + i) == " ")
+          this.valid_cells.push([row + i, col + i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row + i, col + i), ptr))
+            this.target_cells.push([row + i, col + i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row - i, col + i) == " ")
+          this.valid_cells.push([row - i, col + i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row - i, col + i), ptr))
+            this.target_cells.push([row - i, col + i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row - i, col - i) == " ")
+          this.valid_cells.push([row - i, col - i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row - i, col - i), ptr))
+            this.target_cells.push([row - i, col - i]);
+          break;
+        }
+      }
+      for(let i = 1;i < 8;i ++)
+      {
+        if(this.pAt(row + i, col - i) == " ")
+          this.valid_cells.push([row + i, col - i]);
+        else
+        {
+          if(this.areOpposite(this.pAt(row + i, col - i), ptr))
+            this.target_cells.push([row + i, col - i]);
+          break;
+        }
+      }
+    }
+    // knight moves
+    if(pty == 'n')
+    {
+      if(this.pAt(row - 2, col - 1) == " ")
+        this.valid_cells.push([row - 2, col - 1]);
+      else if(this.areOpposite(this.pAt(row - 2, col - 1), ptr))
+        this.target_cells.push([row - 2, col - 1]);
+      if(this.pAt(row - 2, col + 1) == " ")
+        this.valid_cells.push([row - 2, col + 1]);
+      else if(this.areOpposite(this.pAt(row - 2, col + 1), ptr))
+        this.target_cells.push([row - 2, col + 1]);
+      if(this.pAt(row - 1, col + 2) == " ")
+        this.valid_cells.push([row - 1, col + 2]);
+      else if(this.areOpposite(this.pAt(row - 1, col + 2), ptr))
+        this.target_cells.push([row - 1, col + 2]);
+      if(this.pAt(row + 1, col + 2) == " ")
+        this.valid_cells.push([row + 1, col + 2]);
+      else if(this.areOpposite(this.pAt(row + 1, col + 2), ptr))
+        this.target_cells.push([row + 1, col + 2]);
+      if(this.pAt(row + 2, col - 1) == " ")
+        this.valid_cells.push([row + 2, col - 1]);
+      else if(this.areOpposite(this.pAt(row + 2, col - 1), ptr))
+        this.target_cells.push([row + 2, col - 1]);
+      if(this.pAt(row + 2, col + 1) == " ")
+        this.valid_cells.push([row + 2, col + 1]);
+      else if(this.areOpposite(this.pAt(row + 2, col + 1), ptr))
+        this.target_cells.push([row + 2, col + 1]);
+      if(this.pAt(row - 1, col - 2) == " ")
+        this.valid_cells.push([row - 1, col - 2]);
+      else if(this.areOpposite(this.pAt(row - 1, col - 2), ptr))
+        this.target_cells.push([row - 1, col - 2]);
+      if(this.pAt(row + 1, col - 2) == " ")
+        this.valid_cells.push([row + 1, col - 2]);
+      else if(this.areOpposite(this.pAt(row + 1, col - 2), ptr))
+        this.target_cells.push([row + 1, col - 2]);
+    }
+  }
+
+  pAt(row, col)
+  {
+    if(row >= 0 && row < 8 && col >= 0 && col < 8)
+      return this.board[row][col];
+    else
+      return "";
+  }
+
+  colorOf(piece)
+  {
+    if(piece >= 'a' && piece <= 'z')
+      return 'black';
+    else if(piece >= 'A' && piece <= 'Z')
+      return 'white';
+    else
+      return '';
+  }
+
+  areOpposite(p1, p2)
+  {
+    if((this.colorOf(p1) == 'white' && this.colorOf(p2) == 'black') || (this.colorOf(p1) == 'black' && this.colorOf(p2) == 'white'))
+      return true;
+    else
+      return false;
   }
 }
