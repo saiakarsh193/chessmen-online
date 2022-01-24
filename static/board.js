@@ -248,7 +248,7 @@ class Board
     {
       if(this.pAt(row - 1, col) == " ")
         this.valid_cells.push([row - 1, col]);
-      if(this.pAt(row - 2, col) == " " && row == 6)
+      if(this.pAt(row - 1, col) == " " && this.pAt(row - 2, col) == " " && row == 6)
         this.valid_cells.push([row - 2, col]);
       if(this.areOpposite(this.pAt(row - 1, col - 1), ptr))
         this.target_cells.push([row - 1, col - 1]);
