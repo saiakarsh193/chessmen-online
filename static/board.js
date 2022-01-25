@@ -49,7 +49,7 @@ function BoardToFEN(board)
 
 class Board
 {
-  constructor(pieces_img)
+  constructor(pieces_img, myuid)
   {
     this.board_width = 800;
     this.cell_width = this.board_width / 8;
@@ -80,39 +80,61 @@ class Board
     this.valid_cells = [];
     this.target_cells = [];
 
-    this.player = "";
-    // this.cfen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-    this.cfen = "RNBKQBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbkqbnr";
-    this.board = [];
-    this.changePlayer();
+    this.myuid = myuid;
+    this.start = false;
+    this.rowMap = [8, 7, 6, 5, 4, 3, 2, 1];
+    this.colMap = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    this.flip_board = false;
+    this.cfen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+    this.makeBoard();
+
+    this.connect_time = millis();
+    this.pgctr = 0;
   }
 
-  changePlayer()
+  makeBoard()
   {
-    if(this.player == 'white')
-      this.player = 'black';
-    else
-      this.player = 'white';
-    this.cfen = this.cfen.split("").reverse().join("")
-    this.board = FENtoBoard(this.cfen);
-    if(this.player == 'white')
-    {
-      this.rowMap = [8, 7, 6, 5, 4, 3, 2, 1];
-      this.colMap = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    }
-    else
+    let tfen = this.cfen;
+    if(this.flip_board)
+      tfen = this.cfen.split("").reverse().join("");
+    this.board = FENtoBoard(tfen);
+  }
+
+  assign(player)
+  {
+    this.player = player;
+    if(this.player == 'black')
     {
       this.rowMap = [1, 2, 3, 4, 5, 6, 7, 8];
       this.colMap = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
+      this.flip_board = true;
+      this.makeBoard();
     }
+    this.start = true;
   }
 
   draw()
   {
+    if(millis() - this.connect_time > 200 && this.start)
+    {
+      this.connect_time = millis();
+      this.update();
+    }
     background(this.color_black);
     noStroke();
-    textSize(this.text_size);
     textFont('Sans-serif');
+    // user text
+    textSize(this.text_size * 1.25);
+    textAlign(LEFT, TOP);
+    fill(this.color_green);
+    text('you are: ' + this.myuid, -cx + 30, -(this.board_width / 2) + (textAscent() + 20) * 0);
+    text('game status: ' + this.start, -cx + 30, -(this.board_width / 2) + (textAscent() + 20) * 1);
+    if(this.start)
+    {
+      text('your color: ' + this.player, -cx + 30, -(this.board_width / 2) + (textAscent() + 20) * 2);
+    }
+    // board
+    textSize(this.text_size);
     for(let row = 0;row < 8;row ++)
     {
       for(let col = 0;col < 8;col ++)
@@ -192,18 +214,55 @@ class Board
     }
   }
 
+  update()
+  {
+    postData('/ping', {'request': 'status'})
+    .then(data =>
+    {
+      return data['response'];
+    })
+    .then(resp =>
+    {
+      if(resp == '<opponent turn>')
+        this.pgctr = 0;
+      else
+      {
+        if(this.pgctr == 0)
+        {
+          postData('/ping', {'request': 'getfen'})
+          .then(data =>
+          {
+            return data['response'];
+          })
+          .then(resp =>
+          {
+            let srep = resp.substring(1, resp.length - 1).split(' :: ');
+            this.cfen = srep[1];
+            this.makeBoard();
+          });
+        }
+        this.pgctr = 1;
+      }
+    });
+  }
+
   click(posX, posY)
   {
     let col = Math.floor(map(posX, -(this.board_width / 2), (this.board_width / 2), 0, 8));
     let row = Math.floor(map(posY, -(this.board_width / 2), (this.board_width / 2), 0, 8));
-    if(row >=0 && row < 8 && col >= 0 && col < 8)
+    if(row >=0 && row < 8 && col >= 0 && col < 8 && this.start)
     {
+      // ask for status
       if(this.isValidMove(row, col))
       {
         this.board[row][col] = this.board[this.active_cell[0]][this.active_cell[1]];
         this.board[this.active_cell[0]][this.active_cell[1]] = " ";
-        this.cfen = BoardToFEN(this.board);
-        this.changePlayer();
+        let tfen = BoardToFEN(this.board);
+        if(this.flip_board)
+          tfen = tfen.split("").reverse().join("");
+        this.cfen = tfen;
+        // send this cfen
+        postData('/ping', {'request': 'setfen : ' + this.cfen});
         this.valid_cells = [];
         this.target_cells = [];
         this.active_cell = "";

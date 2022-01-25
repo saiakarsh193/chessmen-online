@@ -108,7 +108,7 @@ def getSummary():
     userlist.lock()
     gamelist.lock()
     summary += '(users online: ' + str([(user['uid'], -1 if user['game'] == None else 0) for user in userlist.data]) + ')'
-    summary += '(games running: ' + str([(game.summary(), game.status) for game in gamelist.data]) + ')'
+    summary += '(games running: ' + str([(game.summary(), game.status, game.fen) for game in gamelist.data]) + ')'
     gamelist.unlock()
     userlist.unlock()
     return summary
@@ -153,7 +153,7 @@ def clientThread(client, address):
     req = client.recv(BUFFER_SIZE).decode()
     req = req[1:-1]
     sreq = req.split(":")
-    sreq = [sq.strip().lower() for sq in sreq]
+    sreq = [sq.strip() for sq in sreq]
     uid = sreq[0]
     comm = sreq[1]
     payload = sreq[2] if len(sreq) == 3 else ""

@@ -2,10 +2,24 @@ let cx, cy;
 let board;
 let pieces_img;
 let img_sheet;
+let myuid;
+
+let connect_time = 0;
+let isconnect = false;
 
 function preload()
 {
   img_sheet = loadImage("/static/piece_sheet.png");
+  postData('/ping', {'request': 'getmyuid'})
+    .then(data =>
+    {
+      myuid = data['response'];
+    });
+  postData('/ping', {'request': 'allocate'})
+    .then(data =>
+    {
+      print(data['response']);
+    });
 }
 
 function setup()
@@ -30,16 +44,55 @@ function setup()
     img_sheet.get(601,   0, 119, 141)  // k
   ];
 
-  board = new Board(pieces_img);
+  board = new Board(pieces_img, myuid);
 }
 
 function draw()
 {
+  if(millis() - connect_time > 1 * 1000 && !isconnect)
+  {
+    connect_time = millis();
+    postData('/ping', {'request': 'status'})
+    .then(data =>
+    {
+      return data['response'];
+    })
+    .then(resp =>
+    {
+      print(resp);
+      if(resp != '<waiting for game>')
+      {
+        isconnect = true;
+        postData('/ping', {'request': 'getfen'})
+        .then(data =>
+        {
+          return data['response'];
+        })
+        .then(resp =>
+        {
+          let srep = resp.substring(1, resp.length - 1).split(' :: ');
+          board.assign(srep[0]);
+        });
+      }
+    });
+  }
   translate(cx, cy);
   board.draw();
 }
 
 function mouseClicked()
 {
-  board.click(mouseX - cx, mouseY - cy);
+  if(isconnect)
+  {
+    postData('/ping', {'request': 'status'})
+    .then(data =>
+    {
+      return data['response'];
+    })
+    .then(resp =>
+    {
+      if(resp == '<your turn>')
+        board.click(mouseX - cx, mouseY - cy);
+    });
+  }
 }
