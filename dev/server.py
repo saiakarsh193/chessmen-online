@@ -103,13 +103,17 @@ def exitUID(uid):
     gamelist.unlock()
     userlist.unlock()
 
-def maintainer():
-    # log
+def getSummary():
+    summary = ''
     userlist.lock()
     gamelist.lock()
-    print(len(userlist.data), len(gamelist.data))
+    summary += '(users online: ' + str([(user['uid'], -1 if user['game'] == None else 0) for user in userlist.data]) + ')'
+    summary += '(games running: ' + str([(game.summary(), game.status) for game in gamelist.data]) + ')'
     gamelist.unlock()
     userlist.unlock()
+    return summary
+
+def maintainer():
     # remove unresponsive uid
     userlist.lock()
     rmusers = [user['uid'] for user in userlist.data if(getCTime() - user['ping'] > 100)]
@@ -141,7 +145,7 @@ def maintainer():
     userlist.unlock()
 
 def clientThread(client, address):
-    print('client ' + address[0] + ':' + str(address[1]) + ' connected')
+    # print('client ' + address[0] + ':' + str(address[1]) + ' connected')
     maintainer()
     # connect
     client.send(str.encode('<connected>'))
@@ -182,13 +186,18 @@ def clientThread(client, address):
             resp = '<' + setFEN(uid, payload) + '>'
         else:
             resp = '<uid unallocated>'
+    elif(comm == 'summary'):
+        if(uid == 'dev'):
+            resp = '<' + getSummary() + '>'
+        else:
+            resp = '<unauthorized uid>'
     client.send(str.encode(resp))
     # acknowledgement
     ack = client.recv(BUFFER_SIZE).decode()
     # disconnect
     client.send(str.encode('<disconnected>'))
     client.close()
-    print('client ' + address[0] + ':' + str(address[1]) + ' disconnected')
+    # print('client ' + address[0] + ':' + str(address[1]) + ' disconnected')
 
 while True:
     (client, address) = skt.accept()

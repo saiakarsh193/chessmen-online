@@ -28,6 +28,9 @@ class gameObject:
             self.turn = self.black
         else:
             self.turn = self.white
+
+    def summary(self):
+        return self.white + '->' + self.black
     
     def __str__(self):
         return 'player1 ' + self.player1 + '\nplayer2 ' + self.player2 + '\nwhite ' + self.white + '\nblack ' + self.black + '\nfen ' + self.fen + '\nturn ' + self.turn + '\nstatus ' + str(self.status)
