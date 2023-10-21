@@ -1,204 +1,104 @@
 import socket
-import threading
-import time
+import argparse
 
-from sharedmem import sharedMem
-from gameobject import gameObject
+from utils import get_env, string_hash, chessbonMatch
 
-IP_ADDR, PORT, BUFFER_SIZE = '10.1.130.208', 2000, 4096
+IP_ADDR, PORT, BUFFER_SIZE = get_env()
 
-userlist = sharedMem([])
-gamelist = sharedMem([])
+class chessbonServer:
+    def __init__(self, admin: str) -> None:
+        assert self._login_admin(admin=admin), f"admin login failed using: {admin}"
+        self._setup_socket()
 
-skt = socket.socket()
-skt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-skt.bind((IP_ADDR, PORT))
-print('server binded to ' + IP_ADDR + ':' + str(PORT))
-skt.listen(5)
+        self.users_online = set()
+        self.users_searching = set()
+        self.users_ingame = set()
+        self.matches = {}
 
-def findUID(uid):
-    ufound = False
-    userlist.lock()
-    for user in userlist.data:
-        if(user['uid'] == uid):
-            ufound = True
-            break
-    userlist.unlock()
-    return ufound
+    def _login_admin(self, admin: str) -> bool:
+        self.admin_hash = get_env(return_json=True)["server_admin_hash"]
+        return bool(self.admin_hash == string_hash(admin))
+    
+    def _setup_socket(self):
+        self.skt = socket.socket()
+        self.skt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.skt.bind((IP_ADDR, PORT))
+        print(f"server binded to {IP_ADDR}:{PORT}")
+        self.skt.listen(5)
+    
+    def _login_user(self, user_id: str) -> bool:
+        if not user_id in self.users_online:
+            self.users_online.add(user_id)
+            return True
+        else:
+            return False
+    
+    def _find_match_user(self, user_id: str) -> bool:
+        if not user_id in self.users_searching and not user_id in self.users_ingame:
+            self.users_searching.add(user_id)
+            return True
+        else:
+            return False
+    
+    def _create_match(self, user_id_1: str, user_id_2: str) -> None:
+        new_match = chessbonMatch(user_id_1, user_id_2)
+        self.matches[new_match.match_id] = new_match
 
-def getCTime():
-    return int(time.time()) % 100000
+    def _maintain_server(self):
+        # find matchs for users searching
+        list_users_searching = list(self.users_searching)
+        for ind in range(0, len(list_users_searching), 2):
+            if ind + 1 < len(list_users_searching):
+                user_id_1 = list_users_searching[ind]
+                user_id_2 = list_users_searching[ind + 1]
+                self.users_searching.remove(user_id_1)
+                self.users_searching.remove(user_id_2)
+                self.users_ingame.add(user_id_1)
+                self.users_ingame.add(user_id_2)
+                self._create_match(user_id_1, user_id_2)
 
-def allocateUID(uid):
-    userlist.lock()
-    userlist.data.append({'uid': uid, 'game': None, 'ping': getCTime()})
-    userlist.unlock()
-
-def statusUID(uid):
-    status = ""
-    userlist.lock()
-    gamelist.lock()
-    for user in userlist.data:
-        if(user['uid'] == uid):
-            user['ping'] = getCTime()
-            if(user['game'] == None):
-                status = 'waiting for game'
+    def run(self):
+        while True:
+            (client, address) = self.skt.accept()
+            print(address)
+            request = client.recv(BUFFER_SIZE).decode() # <user_id::type::args|args>
+            request = request[1: -1].split("::")
+            if len(request) == 2:
+                user_id, request_type = request
+                args = []
             else:
-                if(user['game'].status == 0):
-                    if(user['game'].turn == uid):
-                        status = 'your turn'
-                    else:
-                        status = 'opponent turn'
+                user_id, request_type, args = request
+                args = args.split("|")
+            print(user_id, request_type, args)
+            if user_id == "player_killserver":
+                client.send("<ack::server loop stopping>".encode())
+                client.close()
+                break
+            if request_type == "login":
+                if self._login_user(user_id=user_id):
+                    client.send("<ack::user login successful>".encode())
                 else:
-                    status = 'game stopped'
-            break
-    gamelist.unlock()
-    userlist.unlock()
-    return status
-
-def getFEN(uid):
-    fen = 'no game created'
-    userlist.lock()
-    gamelist.lock()
-    for user in userlist.data:
-        if(user['uid'] == uid):
-            if(user['game'] != None):
-                fen = user['game'].color(user['uid']) + ' :: ' + user['game'].fen
-            break
-    gamelist.unlock()
-    userlist.unlock()
-    return fen
-
-def setFEN(uid, fen):
-    status = ''
-    userlist.lock()
-    gamelist.lock()
-    for user in userlist.data:
-        if(user['uid'] == uid):
-            if(user['game'] != None):
-                if(user['game'].status == 0):
-                    if(user['game'].turn == uid):
-                        user['game'].update(fen)
-                        status = 'updated fen'
-                    else:
-                        status = 'not your turn'
+                    client.send("<err::user already logged in>".encode())
+            elif request_type == "find_match":
+                if self._find_match_user(user_id=user_id):
+                    client.send("<ack::finding a match for user>".encode())
                 else:
-                    status = 'game stopped'
-            else:
-                status = 'no game created'
-            break
-    gamelist.unlock()
-    userlist.unlock()
-    return status
+                    client.send("<err::user already in waiting list or match>".encode())
+            client.close()
+            self._maintain_server()
+            print("users_online")
+            print(self.users_online)
+            print("users_searching")
+            print(self.users_searching)
+            print("users_ingame")
+            print(self.users_ingame)
+            print("matches")
+            print(self.matches)
 
-def exitUID(uid):
-    userlist.lock()
-    gamelist.lock()
-    for ind, user in enumerate(userlist.data):
-        if(user['uid'] == uid):
-            if(user['game'] != None):
-                user['game'].status -= 1
-            userlist.data.pop(ind)
-            break
-    gamelist.unlock()
-    userlist.unlock()
 
-def getSummary():
-    summary = ''
-    userlist.lock()
-    gamelist.lock()
-    summary += '(users online: ' + str([(user['uid'], -1 if user['game'] == None else 0) for user in userlist.data]) + ')'
-    summary += '(games running: ' + str([(game.summary(), game.status, game.fen) for game in gamelist.data]) + ')'
-    gamelist.unlock()
-    userlist.unlock()
-    return summary
-
-def maintainer():
-    # remove unresponsive uid
-    userlist.lock()
-    rmusers = [user['uid'] for user in userlist.data if(getCTime() - user['ping'] > 100)]
-    userlist.unlock()
-    for user in rmusers:
-        exitUID(user)
-    # remove finished/stopped games
-    gamelist.lock()
-    gamelist.data = [game for game in gamelist.data if(game.status > -2)]
-    gamelist.unlock()
-    # allocate game
-    userlist.lock()
-    uid1 = ""
-    uid2 = ""
-    for user in userlist.data:
-        if(user['game'] == None):
-            if(uid1 == ''):
-                uid1 = user['uid']
-            elif(uid2 == ''):
-                uid2 = user['uid']
-    if(uid1 != '' and uid2 != ''):
-        gobj = gameObject(uid1, uid2)
-        gamelist.lock()
-        gamelist.data.append(gobj)
-        gamelist.unlock()
-        for user in userlist.data:
-            if(user['uid'] == uid1 or user['uid'] == uid2):
-                user['game'] = gobj
-    userlist.unlock()
-
-def clientThread(client, address):
-    # print('client ' + address[0] + ':' + str(address[1]) + ' connected')
-    maintainer()
-    # connect
-    client.send(str.encode('<connected>'))
-    # request
-    req = client.recv(BUFFER_SIZE).decode()
-    req = req[1:-1]
-    sreq = req.split(":")
-    sreq = [sq.strip() for sq in sreq]
-    uid = sreq[0]
-    comm = sreq[1]
-    payload = sreq[2] if len(sreq) == 3 else ""
-    # response
-    resp = '<invalid command>'
-    if(comm == 'allocate'):
-        if(findUID(uid)):
-            resp = '<uid already allocated>'
-        else:
-            allocateUID(uid)
-            resp = '<uid allocated>'
-    elif(comm == 'status'):
-        if(findUID(uid)):
-            resp = '<' + statusUID(uid) + '>'
-        else:
-            resp = '<uid unallocated>'
-    elif(comm == 'exit'):
-        if(findUID(uid)):
-            exitUID(uid)
-            resp = '<uid exited>'
-        else:
-            resp = '<uid unallocated>'
-    elif(comm == 'getfen'):
-        if(findUID(uid)):
-            resp = '<' + getFEN(uid) + '>'
-        else:
-            resp = '<uid unallocated>'
-    elif(comm == 'setfen'):
-        if(findUID(uid)):
-            resp = '<' + setFEN(uid, payload) + '>'
-        else:
-            resp = '<uid unallocated>'
-    elif(comm == 'summary'):
-        if(uid == 'dev'):
-            resp = '<' + getSummary() + '>'
-        else:
-            resp = '<unauthorized uid>'
-    client.send(str.encode(resp))
-    # acknowledgement
-    ack = client.recv(BUFFER_SIZE).decode()
-    # disconnect
-    client.send(str.encode('<disconnected>'))
-    client.close()
-    # print('client ' + address[0] + ':' + str(address[1]) + ' disconnected')
-
-while True:
-    (client, address) = skt.accept()
-    threading.Thread(target = clientThread, args = (client, address)).start()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="server side for CHESSBON")
+    parser.add_argument("admin", help="CHESSBON server admin name", type=str)
+    args = parser.parse_args()
+    server = chessbonServer(args.admin)
+    server.run()
