@@ -25,7 +25,7 @@ You can kill the server using,
 python3 backend.py kill <password>
 ```
 
-You can update the server password,
+You can update the server password using,
 ```bash
 python3 backend.py update_pass <password>
 ```
