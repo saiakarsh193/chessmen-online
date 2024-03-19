@@ -1,6 +1,7 @@
+import os
 from typing import List, Tuple, Optional
 
-class ChessmenBoard:
+class chessmenBoard:
     _BOARD = List[List[str]]
     _COORD = Tuple[int, int]
 
@@ -169,10 +170,12 @@ class ChessmenBoard:
         return valid_moves
 
     @staticmethod
-    def display(fen: str, turn: str) -> None:
-        board = ChessmenBoard.fen2board(fen)
+    def display(fen: str, turn: str, flush: bool = False) -> None:
+        if flush:
+            os.system('clear')
+        board = chessmenBoard.fen2board(fen)
         if turn == 'b':
-            board = ChessmenBoard.flip_board(board)
+            board = chessmenBoard.flip_board(board)
         row_sep = '  ' + '=====' * 8 + '='
         for row in range(8):
             print(row_sep)
@@ -191,13 +194,13 @@ class ChessmenBoard:
     
     def run_offline_multiplayer(self):
         while True:
-            self.display(self.fen, self.turn)
+            self.display(self.fen, self.turn, flush=True)
             new_fen = self.do_turn(self.fen, self.turn)
             if new_fen != None:
                 self.fen = new_fen
                 self.turn = self.flip_turn(self.turn)
  
-    def _get_data(self, fen: str, turn: str) -> Optional[Tuple[_BOARD, str, _COORD, _COORD]]:
+    def _get_data(self, fen: str, turn: str) -> Optional[Tuple[_BOARD, _COORD, _COORD]]:
         def format_pos(pos: str) -> Optional[str]:
             pos = pos.strip().lower()
             if len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8':
@@ -220,17 +223,16 @@ class ChessmenBoard:
         if board[st_coord[0]][st_coord[1]][1] != turn:
             print("invalid position (opp piece)")
             return None
-        return board, en, st_coord, en_coord
+        return board, st_coord, en_coord
     
     def do_turn(self, fen: str, turn: str) -> Optional[str]:
         data = self._get_data(fen, turn)
         if data == None:
             return None
-        board, en, st_coord, en_coord = data
+        board, st_coord, en_coord = data
         valid_moves = self.get_valid_moves(board, st_coord, reverse_board=(turn == 'b'))
-        valid_moves = [self.coord2pos(move) for move in valid_moves]
-        if not en in valid_moves:
-            print("invalid move, valid:", ' '.join(valid_moves))
+        if not en_coord in valid_moves:
+            print("invalid move, valid:", ' '.join([self.coord2pos(move) for move in valid_moves]))
             return None
         board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
         board[st_coord[0]][st_coord[1]] = ' '

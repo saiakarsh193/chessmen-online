@@ -3,7 +3,7 @@ import yaml
 import random
 import hashlib
 import threading
-from typing import Dict, List, Union, Any
+from typing import Dict, Tuple, Union, Any
 
 
 class sharedMem:
@@ -30,11 +30,11 @@ def dump_yaml(path: str, data: Dict) -> None:
     with open(path, 'w') as f:
         yaml.dump(data, f, sort_keys=False, allow_unicode=True)
 
-def get_env(path = ".", return_json: bool = False) -> Union[Dict, List[Any]]:
+def get_env(path = ".", return_json: bool = False) -> Union[Dict, Tuple[str, str, str, str]]:
     envs = load_yaml(os.path.join(path, "env.yaml"))
     if return_json:
         return envs
-    return envs["ip_addr"], envs["port"], envs["buffer_size"]
+    return envs["ip_addr"], envs["port"], envs["buffer_size"], envs["server_password"]
 
 def update_env(envs: Dict, path = ".") -> None:
     dump_yaml(os.path.join(path, "env.yaml"), envs)
