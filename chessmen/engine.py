@@ -1,11 +1,19 @@
 from typing import List, Tuple, Optional
 
 class ChessmenBoard:
-    def __init__(self):
+    _BOARD = List[List[str]]
+    _COORD = Tuple[int, int]
+
+    def __init__(self) -> None:
         self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
         self.turn = 'w'
+
+    @staticmethod
+    def flip_turn(turn: str) -> str:
+        return 'w' if turn == 'b' else 'b'
     
-    def fen2board(self, fen: str) -> List[List[str]]:
+    @staticmethod
+    def fen2board(fen: str) -> _BOARD:
         bfen = []
         for row in fen.split('/'):
             cfen = []
@@ -17,7 +25,8 @@ class ChessmenBoard:
             bfen.append(cfen)
         return bfen
     
-    def board2fen(self, board: List[List[str]]) -> str:
+    @staticmethod
+    def board2fen(board: _BOARD) -> str:
         fen = ""
         for row in board:
             ctr = 0
@@ -33,25 +42,20 @@ class ChessmenBoard:
             fen += '/'
         return fen[: -1]
     
-    def flip_board(self, board: List[List[str]]) -> List[List[str]]:
+    @staticmethod
+    def flip_board(board: _BOARD) -> _BOARD:
         return [row[::-1] for row in board[::-1]]
-
-    def pos2coord(self, pos: str) -> Tuple[int, int]:
+    
+    @staticmethod
+    def pos2coord(pos: str) -> _COORD:
         return 8 - int(pos[1]), ord(pos[0]) - ord('a')
     
-    def coord2pos(self, coord: Tuple[int, int]) -> str:
+    @staticmethod
+    def coord2pos(coord: _COORD) -> str:
         return chr(ord('a') + coord[1]) + str(8 - coord[0])
     
-    def flip_coord(self, coord: Tuple[int, int]) -> Tuple[int, int]:
-        return 7 - coord[0], 7 - coord[1]
-    
-    def format_pos(self, pos: str) -> Optional[str]:
-        pos = pos.strip().lower()
-        if len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8':
-            return pos
-        return None
-
-    def get_valid_moves(self, board: List[List[str]], coord: Tuple[int, int]) -> List[Tuple[int, int]]:
+    @staticmethod
+    def get_valid_moves(board: _COORD, coord: _COORD, reverse_board: bool = False) -> List[_COORD]:
         row, col = coord
         piece, color = board[row][col]
         is_bound = lambda row, col: (row >= 0 and row <= 7) and (col >= 0 and col <= 7)
@@ -60,14 +64,24 @@ class ChessmenBoard:
         is_empty = lambda row, col: board[row][col] == ' '
         valid_moves = []
         if piece == 'p':
-            if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move
-                valid_moves.append((row - 2, col))
-            if is_bound(row - 1, col) and is_empty(row - 1, col): # straight
-                valid_moves.append((row - 1, col))
-            if is_bound(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
-                valid_moves.append((row - 1, col - 1))
-            if is_bound(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
-                valid_moves.append((row - 1, col + 1))
+            if not reverse_board:
+                if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move
+                    valid_moves.append((row - 2, col))
+                if is_bound(row - 1, col) and is_empty(row - 1, col): # straight
+                    valid_moves.append((row - 1, col))
+                if is_bound(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
+                    valid_moves.append((row - 1, col - 1))
+                if is_bound(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
+                    valid_moves.append((row - 1, col + 1))
+            else:
+                if row == 1 and is_empty(row + 1, col) and is_empty(row + 2, col): # first double move
+                    valid_moves.append((row + 2, col))
+                if is_bound(row + 1, col) and is_empty(row + 1, col): # straight
+                    valid_moves.append((row + 1, col))
+                if is_bound(row + 1, col - 1) and is_opposite(row + 1, col - 1): # kill
+                    valid_moves.append((row + 1, col - 1))
+                if is_bound(row + 1, col + 1) and is_opposite(row + 1, col + 1): # kill
+                    valid_moves.append((row + 1, col + 1))
         if piece == 'n':
             if is_bound(row - 2, col - 1) and not is_same(row - 2, col - 1):
                 valid_moves.append((row - 2, col - 1))
@@ -154,16 +168,17 @@ class ChessmenBoard:
                 valid_moves.append((row + 1, col + 1))
         return valid_moves
 
-    def display(self) -> None:
-        board = self.fen2board(self.fen)
-        if self.turn == 'b':
-            board = self.flip_board(board)
+    @staticmethod
+    def display(fen: str, turn: str) -> None:
+        board = ChessmenBoard.fen2board(fen)
+        if turn == 'b':
+            board = ChessmenBoard.flip_board(board)
         row_sep = '  ' + '=====' * 8 + '='
         for row in range(8):
             print(row_sep)
             for col in range(8):
                 if col == 0:
-                    print(str(8 - row) if self.turn == 'w' else str(row + 1), end=' ')
+                    print(str(8 - row) if turn == 'w' else str(row + 1), end=' ')
                 back = '-' if (row + col) % 2 else ' '
                 piece = board[row][col] if board[row][col] != ' ' else back * 2
                 print(f'|{back}{piece}{back}', end='')
@@ -172,45 +187,51 @@ class ChessmenBoard:
             if row == 7:
                 print(row_sep)
         l_not = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        print('    '.join([''] + (l_not if self.turn == 'w' else l_not[::-1])))
+        print('    '.join([''] + (l_not if turn == 'w' else l_not[::-1])))
     
-    def run(self):
+    def run_offline_multiplayer(self):
         while True:
-            self.display()
-            board = self.fen2board(self.fen)
-            inp = input(f"({self.turn})> ").strip().split()
-            if len(inp) != 2:
-                print("invalid format")
-                continue
-            st, en = self.format_pos(inp[0]), self.format_pos(inp[1])
-            if st == None or en == None:
-                print("invalid position (bound)")
-                continue
-            st_coord = self.pos2coord(st)
-            en_coord = self.pos2coord(en)
-            if board[st_coord[0]][st_coord[1]] == ' ':
-                print("invalid position (no piece)")
-                continue
-            if board[st_coord[0]][st_coord[1]][1] != self.turn:
-                print("invalid position (opp piece)")
-                continue
-            if self.turn == 'b':
-                board = self.flip_board(board)
-                st_coord = self.flip_coord(st_coord)
-                en_coord = self.flip_coord(en_coord)
-            valid_moves = self.get_valid_moves(board, st_coord)
-            if self.turn == 'b':
-                valid_moves = [self.flip_coord(move) for move in valid_moves]
-            valid_moves = [self.coord2pos(move) for move in valid_moves]
-            if not en in valid_moves:
-                print("invalid move, valid:", ' '.join(valid_moves))
-                continue
-            board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
-            board[st_coord[0]][st_coord[1]] = ' '
-            if self.turn == 'b':
-                board = self.flip_board(board)
-            self.fen = self.board2fen(board)
-            self.turn = 'w' if self.turn == 'b' else 'b'
-
-cb = ChessmenBoard()
-cb.run()
+            self.display(self.fen, self.turn)
+            new_fen = self.do_turn(self.fen, self.turn)
+            if new_fen != None:
+                self.fen = new_fen
+                self.turn = self.flip_turn(self.turn)
+ 
+    def _get_data(self, fen: str, turn: str) -> Optional[Tuple[_BOARD, str, _COORD, _COORD]]:
+        def format_pos(pos: str) -> Optional[str]:
+            pos = pos.strip().lower()
+            if len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8':
+                return pos
+            return None
+        board = self.fen2board(fen)
+        inp = input(f"({turn})> ").strip().split()
+        if len(inp) != 2:
+            print("invalid format")
+            return None
+        st, en = format_pos(inp[0]), format_pos(inp[1])
+        if st == None or en == None:
+            print("invalid position (bound)")
+            return None
+        st_coord = self.pos2coord(st)
+        en_coord = self.pos2coord(en)
+        if board[st_coord[0]][st_coord[1]] == ' ':
+            print("invalid position (no piece)")
+            return None
+        if board[st_coord[0]][st_coord[1]][1] != turn:
+            print("invalid position (opp piece)")
+            return None
+        return board, en, st_coord, en_coord
+    
+    def do_turn(self, fen: str, turn: str) -> Optional[str]:
+        data = self._get_data(fen, turn)
+        if data == None:
+            return None
+        board, en, st_coord, en_coord = data
+        valid_moves = self.get_valid_moves(board, st_coord, reverse_board=(turn == 'b'))
+        valid_moves = [self.coord2pos(move) for move in valid_moves]
+        if not en in valid_moves:
+            print("invalid move, valid:", ' '.join(valid_moves))
+            return None
+        board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
+        board[st_coord[0]][st_coord[1]] = ' '
+        return self.board2fen(board)
