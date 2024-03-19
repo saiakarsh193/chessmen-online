@@ -11,3 +11,11 @@ class chessmenCLI:
         ...
 
 cli = chessmenCLI("akarsh")
+
+# client = chessmenClient(user_id="akarsh")
+# client.login()
+# client.find_game()
+
+# client = chessmenClient(user_id="ankitha")
+# client.login()
+# client.find_game()
