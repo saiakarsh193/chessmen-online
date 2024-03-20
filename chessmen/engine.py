@@ -1,17 +1,15 @@
 import os
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal, Union
 
 class chessmenBoard:
     _BOARD = List[List[str]]
     _COORD = Tuple[int, int]
-
-    def __init__(self) -> None:
-        self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-        self.turn = 'w'
+    _COLOR = Literal["white", "black"]
+    _START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
 
     @staticmethod
-    def flip_turn(turn: str) -> str:
-        return 'w' if turn == 'b' else 'b'
+    def flip_turn(turn: _COLOR) -> _COLOR:
+        return "white" if turn == "black" else "black"
     
     @staticmethod
     def fen2board(fen: str) -> _BOARD:
@@ -56,7 +54,7 @@ class chessmenBoard:
         return chr(ord('a') + coord[1]) + str(8 - coord[0])
     
     @staticmethod
-    def get_valid_moves(board: _COORD, coord: _COORD, reverse_board: bool = False) -> List[_COORD]:
+    def get_valid_moves(board: _BOARD, coord: _COORD, reverse_board: bool = False) -> List[_COORD]:
         row, col = coord
         piece, color = board[row][col]
         is_bound = lambda row, col: (row >= 0 and row <= 7) and (col >= 0 and col <= 7)
@@ -170,18 +168,21 @@ class chessmenBoard:
         return valid_moves
 
     @staticmethod
-    def display(fen: str, turn: str, flush: bool = False) -> None:
+    def display(data: Union[str, _BOARD], reverse_board: bool = False, flush: bool = False) -> None:
+        if type(data) == str:
+            board = chessmenBoard.fen2board(data)
+        else:
+            board = data
         if flush:
             os.system('clear')
-        board = chessmenBoard.fen2board(fen)
-        if turn == 'b':
+        if reverse_board:
             board = chessmenBoard.flip_board(board)
         row_sep = '  ' + '=====' * 8 + '='
         for row in range(8):
             print(row_sep)
             for col in range(8):
                 if col == 0:
-                    print(str(8 - row) if turn == 'w' else str(row + 1), end=' ')
+                    print(str(8 - row) if not reverse_board else str(row + 1), end=' ')
                 back = '-' if (row + col) % 2 else ' '
                 piece = board[row][col] if board[row][col] != ' ' else back * 2
                 print(f'|{back}{piece}{back}', end='')
@@ -190,50 +191,45 @@ class chessmenBoard:
             if row == 7:
                 print(row_sep)
         l_not = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        print('    '.join([''] + (l_not if turn == 'w' else l_not[::-1])))
-    
-    def run_offline_multiplayer(self):
-        while True:
-            self.display(self.fen, self.turn, flush=True)
-            new_fen = self.do_turn(self.fen, self.turn)
-            if new_fen != None:
-                self.fen = new_fen
-                self.turn = self.flip_turn(self.turn)
- 
-    def _get_data(self, fen: str, turn: str) -> Optional[Tuple[_BOARD, _COORD, _COORD]]:
-        def format_pos(pos: str) -> Optional[str]:
-            pos = pos.strip().lower()
-            if len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8':
-                return pos
-            return None
-        board = self.fen2board(fen)
-        inp = input(f"({turn})> ").strip().split()
-        if len(inp) != 2:
+        print('    '.join([''] + (l_not if not reverse_board else l_not[::-1])))
+
+    @staticmethod
+    def prompt_user(prompt: str, board: _BOARD, turn: str) -> Optional[Tuple[_COORD, _COORD]]:
+        inp = input(f"{prompt}> ").strip().lower().split()
+        if len(inp) == 2:
+            st, en = inp
+            check_pos = lambda pos: len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8'
+            if check_pos(st) and check_pos(en):
+                st_coord, en_coord = chessmenBoard.pos2coord(st), chessmenBoard.pos2coord(en)
+                if board[st_coord[0]][st_coord[1]] == ' ' or board[st_coord[0]][st_coord[1]][1] != turn:
+                    return st_coord, en_coord
+                else:
+                    print("invalid position (empty or opp)")
+            else:
+                print("invalid position")
+        else:
             print("invalid format")
-            return None
-        st, en = format_pos(inp[0]), format_pos(inp[1])
-        if st == None or en == None:
-            print("invalid position (bound)")
-            return None
-        st_coord = self.pos2coord(st)
-        en_coord = self.pos2coord(en)
-        if board[st_coord[0]][st_coord[1]] == ' ':
-            print("invalid position (no piece)")
-            return None
-        if board[st_coord[0]][st_coord[1]][1] != turn:
-            print("invalid position (opp piece)")
-            return None
-        return board, st_coord, en_coord
+        return None
     
-    def do_turn(self, fen: str, turn: str) -> Optional[str]:
-        data = self._get_data(fen, turn)
-        if data == None:
+    @staticmethod
+    def update_board(board: _BOARD, st_coord: _COORD, en_coord: _COORD, reverse_board: bool = False) -> Optional[_BOARD]:
+        valid_moves = chessmenBoard.get_valid_moves(board, st_coord, reverse_board=reverse_board)
+        if en_coord in valid_moves:
+            board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
+            board[st_coord[0]][st_coord[1]] = ' '
+            return board
+        else:
+            print("invalid move, valid:", ' '.join([chessmenBoard.coord2pos(move) for move in valid_moves]))
             return None
-        board, st_coord, en_coord = data
-        valid_moves = self.get_valid_moves(board, st_coord, reverse_board=(turn == 'b'))
-        if not en_coord in valid_moves:
-            print("invalid move, valid:", ' '.join([self.coord2pos(move) for move in valid_moves]))
-            return None
-        board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
-        board[st_coord[0]][st_coord[1]] = ' '
-        return self.board2fen(board)
+    
+    @staticmethod
+    def run_offline_multiplayer(fen: str = _START_FEN, turn: _COLOR = "white"):
+        board = chessmenBoard.fen2board(fen)
+        while True:
+            chessmenBoard.display(board, (turn == "black"), flush=True)
+            inp = chessmenBoard.prompt_user(f"({turn})", board, turn)
+            if inp != None:
+                st_coord, en_coord = inp
+                new_board = chessmenBoard.update_board(board, st_coord, en_coord, (turn == "black"))
+                if new_board != None:
+                    turn = chessmenBoard.flip_turn(turn)
