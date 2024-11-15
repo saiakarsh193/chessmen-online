@@ -28,8 +28,7 @@ python3 app.py
 ```
 ![gui_chess](/imgs/gui_chess.png)
 
-### dev side
-You can start the server using,
+### server side
 ```bash
 # to start server
 python3 backend.py start <password>
