@@ -1,15 +1,55 @@
 import time
 import socket
 import random
-from typing import Dict, List, Tuple
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Literal
+
+from .engine import FEN, START_FEN, PIECE_COLOR
 from .utils import get_env, string_hash
 
 IP_ADDR, PORT, BUFFER_SIZE, SERVER_HASH = get_env()
+SERVER_MIN_REFRESH_TIME = 3 # seconds
+USER_MAX_IDLE_TIME = 30 # seconds
+USER_STATUS = Literal['in_queue', 'in_match']
+
+@dataclass
+class chessmenUser:
+    user_id: str
+    status: USER_STATUS = 'in_queue'
+    match_id: Optional[str] = None
+    last_ping: float = time.time()
+
+    def refresh_ping(self) -> None:
+        self.last_ping = time.time()
+
+    def time_since_last_ping(self) -> float:
+        return time.time() - self.last_ping
+
+@dataclass
+class chessmenMatch:
+    match_id: str
+    white_user_id: str
+    black_user_id: str
+    fen: FEN = START_FEN
+    turn: PIECE_COLOR = 'white'
+
+    def switch_turn(self) -> None:
+        if self.turn == 'white':
+            self.turn = 'black'
+        else:
+            self.turn = 'white'
+
+    @staticmethod
+    def create_match(user_id_1: str, user_id_2: str) -> 'chessmenMatch':
+        match_id = string_hash(user_id_1 + user_id_2 + str(time.time()))
+        return chessmenMatch(
+            match_id=match_id,
+            white_user_id=user_id_1,
+            black_user_id=user_id_2
+        )
 
 class chessmenServer:
-    REFRESH_TIME = 3 # seconds
-    MAX_IDLE_TIME = 30 # seconds
-
     def __init__(self, server_password: str) -> None:
         if string_hash(server_password) != SERVER_HASH:
             print("incorrect server password")
@@ -22,95 +62,89 @@ class chessmenServer:
         self.skt.listen(5)
 
         self.last_refresh_time = time.time()
-        self.users = {}
-        self.games = {}
+        self.users: Dict[str, chessmenUser] = {}
+        self.matches: Dict[str, chessmenMatch] = {}
     
     def refresh(self):
-        remove_games = []
-        remove_users = []
-        queue_users = []
-        for user_id, meta in self.users.items():
-            if time.time() - meta["ping"] >= self.MAX_IDLE_TIME: # user crosses idle time
-                if meta["status"] == "in_game": # remove game, and both users
-                    user_id1, user_id2 = self.games[meta["game_id"]]["white"], self.games[meta["game_id"]]["black"]
-                    remove_games.append(meta["game_id"])
-                    remove_users.append(user_id1)
-                    remove_users.append(user_id2)
+        matches_to_remove = []
+        users_to_remove = []
+        users_in_queue = []
+        for user_id, user in self.users.items():
+            if user.time_since_last_ping() >= USER_MAX_IDLE_TIME: # user crosses idle time
+                if user.status == "in_match": # remove match, and both users
+                    match = self.matches[user.match_id]
+                    users_to_remove.append(match.white_user_id)
+                    users_to_remove.append(match.black_user_id)
+                    matches_to_remove.append(match.match_id)
                 else:
-                    remove_users.append(user_id)
-            elif meta["status"] == "in_queue": # add user to queue
-                queue_users.append(user_id)
+                    users_to_remove.append(user_id)
+            elif user.status == "in_queue": # add user to queue
+                users_in_queue.append(user_id)
         
-        # remove games
-        for game_id in remove_games:
-            del self.games[game_id]
+        # remove matches
+        for match_id in matches_to_remove:
+            del self.matches[match_id]
 
         # remove users
-        for user_id in remove_users:
+        for user_id in users_to_remove:
             del self.users[user_id]
         
-        # create games
-        while len(queue_users) >= 2: # 2 users at a time
-            user_id1, user_id2 = random.sample(queue_users, k=2)
-            queue_users.remove(user_id1)
-            queue_users.remove(user_id2)
-            self.users[user_id1]["status"] = "in_game"
-            self.users[user_id2]["status"] = "in_game"
-            game_id = string_hash(user_id1 + user_id2 + str(int(time.time())))
-            self.users[user_id1]["game_id"] = game_id
-            self.users[user_id2]["game_id"] = game_id
-            self.games[game_id] = {
-                "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
-                "white": user_id1,
-                "black": user_id2,
-                "turn": "white"
-            }
+        # create matches
+        while len(users_in_queue) >= 2: # 2 users at a time
+            user_id_1, user_id_2 = random.sample(users_in_queue, k=2)
+            match = chessmenMatch.create_match(user_id_1, user_id_2)
+            self.users[user_id_1].status = 'in_match'
+            self.users[user_id_1].match_id = match.match_id
+            users_in_queue.remove(user_id_1)
+            self.users[user_id_2].status = 'in_match'
+            self.users[user_id_2].match_id = match.match_id
+            users_in_queue.remove(user_id_2)
+            self.matches[match.match_id] = match
         
         print("\n" + "="*30)
-        print("server refresh done")
-        print("users:")
-        for user_id, meta in self.users.items():
-            print(f"\t{user_id} : {meta['status']} | {meta['game_id']} | {int(time.time() - meta['ping'])}")
-        print("games:")
-        for game_id, meta in self.games.items():
-            print(f"\t{game_id} : {meta['fen']} | {meta['white']} | {meta['black']} | {meta['turn']}")
+        print("SERVER REFRESH")
+        print(f"USERS: ({len(self.users)})")
+        for user_id, user in self.users.items():
+            print(f"\t{user_id} : {user} - {user.time_since_last_ping():.2f}")
+        print(f"MATCHES: ({len(self.matches)})")
+        for match_id, match in self.matches.items():
+            print(f"\t{match_id} : {match}")
         print("="*30 + "\n")
 
-    def handle_request(self, user_id: str, request_type: str, args: List[str]) -> Tuple[str, str]:
+    def handle_request(self, request_type: str, user_id: str, args: List[str]) -> Tuple[str, str]:
         if user_id in self.users:
-            self.users[user_id]["ping"] = time.time()
-        if request_type == "find_game":
+            self.users[user_id].refresh_ping()
+        if request_type == "FIND_MATCH":
             if user_id in self.users:
-                if self.users[user_id]["status"] == "in_queue":
+                if self.users[user_id].status == "in_queue":
                     return "error", "user is already in queue"
-                elif self.users[user_id]["status"] == "in_game":
-                    return "error", "user is already in game"
+                elif self.users[user_id].status == "in_match":
+                    return "error", "user is already in match"
             else:
-                self.users[user_id] = {
-                    "status": "in_queue",
-                    "game_id": None,
-                    "ping": time.time()
-                }
-                return "success", "user added to queue"
-        elif request_type == "status":
+                self.users[user_id] = chessmenUser(user_id)
+                return "success", "user added to match queue"
+        elif request_type == "STATUS_MATCH":
             if user_id in self.users:
-                if self.users[user_id]["status"] == "in_queue":
+                if self.users[user_id].status == "in_queue":
                     return "success", "in_queue"
-                elif self.users[user_id]["status"] == "in_game":
-                    game = self.games[self.users[user_id]["game_id"]]
-                    return "success", "in_game" + "|" + game["fen"] + "|" + game["white"] + "|" + game["black"] + "|" + game["turn"]
+                elif self.users[user_id].status == "in_match":
+                    match_id = self.users[user_id].match_id
+                    match = self.matches[match_id]
+                    return_args = [match.fen, match.white_user_id, match.black_user_id, match.turn]
+                    return "success", "in_match|" + "|".join(return_args)
             else:
                 return "error", "user is not online"
-        elif request_type == "update":
+        elif request_type == "UPDATE_MATCH":
             if user_id in self.users:
-                if self.users[user_id]["status"] == "in_queue":
-                    return "error", "user not in game"
-                elif self.users[user_id]["status"] == "in_game":
-                    game_id = self.users[user_id]["game_id"]
-                    user_color = "white" if self.games[game_id]["white"] == user_id else "black"
-                    if user_color == self.games[game_id]["turn"]:
-                        self.games[game_id]["fen"] = args[0]
-                        self.games[game_id]["turn"] = "black" if self.games[game_id]["turn"] == "white" else "white"
+                if self.users[user_id].status == "in_queue":
+                    return "error", "user not in match"
+                elif self.users[user_id].status == "in_match":
+                    match_id = self.users[user_id].match_id
+                    match = self.matches[match_id]
+                    user_color = "white" if match.white_user_id == user_id else "black"
+                    if user_color == match.turn:
+                        match.fen = args[0]
+                        match.switch_turn()
                         return "success", "fen has been updated"
                     else:
                         return "error", "not user turn yet"
@@ -120,19 +154,20 @@ class chessmenServer:
     def run(self):
         while True:
             (client, address) = self.skt.accept()            
-            user_id, request_type, args = client.recv(BUFFER_SIZE).decode().split("::")
-            args = args.split("|")
-            print(f"client: {address} -> {user_id} : {request_type}")
+            request_type, user_id, args = client.recv(BUFFER_SIZE).decode().split("::")
+            date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            args = args.split('|') if args else []
+            print(f"{request_type} [{date}] {user_id} ({address})")
 
-            if request_type == "killserver":
+            if request_type == "KILLSWITCH":
                 client.send("success::killing server".encode())
                 client.close()
                 break
             else:
-                status, payload = self.handle_request(user_id, request_type, args)
+                status, payload = self.handle_request(request_type, user_id, args)
                 client.send(f"{status}::{payload}".encode())
                 client.close()
             
-            if time.time() - self.last_refresh_time >= self.REFRESH_TIME:
+            if time.time() - self.last_refresh_time >= SERVER_MIN_REFRESH_TIME:
                 self.last_refresh_time = time.time()
                 self.refresh()

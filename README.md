@@ -47,3 +47,7 @@ port: 8001
 buffer_size: 4096
 server_password: 5d41402abc4b2a76b9719d911017c592
 ```
+
+To get the IP Address:
+- For Linux, use `ip addr`
+- For MACOS, use `ipconfig getsummary en0` (assuming `en0` is the LAN source)

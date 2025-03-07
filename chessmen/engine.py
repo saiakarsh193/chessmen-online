@@ -1,18 +1,20 @@
-import os
+from copy import deepcopy
 from typing import List, Tuple, Optional, Literal, Union
 
-class chessmenBoard:
-    _BOARD = List[List[str]]
-    _COORD = Tuple[int, int]
-    _COLOR = Literal["white", "black"]
-    _START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+FEN = str
+BOARD = List[List[str]]
+COORD = Tuple[int, int]
+NOTATION = str
 
+START_FEN: FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'
+PIECE_COLOR = Literal['black', 'white']
+
+class chessmenBoardUtility:
     @staticmethod
-    def flip_turn(turn: _COLOR) -> _COLOR:
-        return "white" if turn == "black" else "black"
-    
-    @staticmethod
-    def fen2board(fen: str) -> _BOARD:
+    def convert_fen2board(fen: FEN) -> BOARD:
+        # upper case is white
+        # lower case is black
+        # we convert all numbers into empty spaces
         bfen = []
         for row in fen.split('/'):
             cfen = []
@@ -23,10 +25,12 @@ class chessmenBoard:
                     cfen.append(col.lower() + ('w' if col.isupper() else 'b'))
             bfen.append(cfen)
         return bfen
-    
+
     @staticmethod
-    def board2fen(board: _BOARD) -> str:
-        fen = ""
+    def convert_board2fen(board: BOARD) -> FEN:
+        # we convert all empty spaces into numbers
+        # notation if from top left to bottom right
+        fen = ''
         for row in board:
             ctr = 0
             for i, col in enumerate(row):
@@ -41,195 +45,231 @@ class chessmenBoard:
             fen += '/'
         return fen[: -1]
     
+    # standard notation
+    # 8 r n b q k b n r    ->    BLACK
+    # 7 p p p p p p p p
+    # 6
+    # 5
+    # 4
+    # 3
+    # 2 P P P P P P P P
+    # 1 R N B Q K B N R    ->    WHITE
+    #   a b c d e f g h
+
+    # board representation
+    # (0, 0)     ->    (0, 7)
+    # rb
+    #
+    #
+    #
+    #
+    # rw
+    # (7, 0)     ->    (7, 7)
+
     @staticmethod
-    def flip_board(board: _BOARD) -> _BOARD:
-        return [row[::-1] for row in board[::-1]]
-    
-    @staticmethod
-    def pos2coord(pos: str) -> _COORD:
+    def notation2coord(pos: NOTATION) -> COORD:
+        # a1 -> (7, 0)
         return 8 - int(pos[1]), ord(pos[0]) - ord('a')
     
     @staticmethod
-    def coord2pos(coord: _COORD) -> str:
+    def coord2notation(coord: COORD) -> NOTATION:
+        # (7, 0) -> a1
         return chr(ord('a') + coord[1]) + str(8 - coord[0])
     
     @staticmethod
-    def get_valid_moves(board: _BOARD, coord: _COORD, reverse_board: bool = False) -> List[_COORD]:
+    def verify_notation(pos: NOTATION) -> bool:
+        return len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8'
+    
+    @ staticmethod
+    def verify_coord(coord: COORD) -> bool:
+        return coord[0] >= 0 and coord[0] <= 7 and coord[1] >= 0 and coord[1] <= 7
+    
+    @staticmethod
+    def moves_for_pawn(coord: COORD, board: BOARD) -> List[COORD]:
         row, col = coord
         piece, color = board[row][col]
-        is_bound = lambda row, col: (row >= 0 and row <= 7) and (col >= 0 and col <= 7)
-        is_same = lambda row, col: board[row][col] != ' ' and board[row][col][1] == color
-        is_opposite = lambda row, col: board[row][col] != ' ' and board[row][col][1] != color
-        is_empty = lambda row, col: board[row][col] == ' '
+        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
+        is_empty = lambda r, c: board[r][c] == ' '
+        is_opposite = lambda r, c: board[r][c] != ' ' and board[r][c][1] != color
         valid_moves = []
-        if piece == 'p':
-            if not reverse_board:
-                if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move
-                    valid_moves.append((row - 2, col))
-                if is_bound(row - 1, col) and is_empty(row - 1, col): # straight
-                    valid_moves.append((row - 1, col))
-                if is_bound(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
-                    valid_moves.append((row - 1, col - 1))
-                if is_bound(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
-                    valid_moves.append((row - 1, col + 1))
-            else:
-                if row == 1 and is_empty(row + 1, col) and is_empty(row + 2, col): # first double move
-                    valid_moves.append((row + 2, col))
-                if is_bound(row + 1, col) and is_empty(row + 1, col): # straight
-                    valid_moves.append((row + 1, col))
-                if is_bound(row + 1, col - 1) and is_opposite(row + 1, col - 1): # kill
-                    valid_moves.append((row + 1, col - 1))
-                if is_bound(row + 1, col + 1) and is_opposite(row + 1, col + 1): # kill
-                    valid_moves.append((row + 1, col + 1))
-        if piece == 'n':
-            if is_bound(row - 2, col - 1) and not is_same(row - 2, col - 1):
-                valid_moves.append((row - 2, col - 1))
-            if is_bound(row - 2, col + 1) and not is_same(row - 2, col + 1):
-                valid_moves.append((row - 2, col + 1))
-            if is_bound(row - 1, col - 2) and not is_same(row - 1, col - 2):
-                valid_moves.append((row - 1, col - 2))
-            if is_bound(row - 1, col + 2) and not is_same(row - 1, col + 2):
-                valid_moves.append((row - 1, col + 2))
-            if is_bound(row + 1, col - 2) and not is_same(row + 1, col - 2):
-                valid_moves.append((row + 1, col - 2))
-            if is_bound(row + 1, col + 2) and not is_same(row + 1, col + 2):
-                valid_moves.append((row + 1, col + 2))
-            if is_bound(row + 2, col - 1) and not is_same(row + 2, col - 1):
-                valid_moves.append((row + 2, col - 1))
-            if is_bound(row + 2, col + 1) and not is_same(row + 2, col + 1):
-                valid_moves.append((row + 2, col + 1))
-        if piece == 'b' or piece == 'q':
-            for i in range(1, min(row, col) + 1): # left top
-                if is_bound(row - i, col - i):
-                    if not is_same(row - i, col - i): # empty or kill
-                        valid_moves.append((row - i, col - i))
-                    if not is_empty(row - i, col - i): # path blocked
-                        break
-            for i in range(1, min(row, 7 - col) + 1): # right top
-                if is_bound(row - i, col + i):
-                    if not is_same(row - i, col + i): # empty or kill
-                        valid_moves.append((row - i, col + i))
-                    if not is_empty(row - i, col + i): # path blocked
-                        break
-            for i in range(1, min(7 - row, col) + 1): # bottom left
-                if is_bound(row + i, col - i):
-                    if not is_same(row + i, col - i): # empty or kill
-                        valid_moves.append((row + i, col - i))
-                    if not is_empty(row + i, col - i): # path blocked
-                        break
-            for i in range(1, min(7 - row, 7 - col) + 1): # bottom right
-                if is_bound(row + i, col + i):
-                    if not is_same(row + i, col + i): # empty or kill
-                        valid_moves.append((row + i, col + i))
-                    if not is_empty(row + i, col + i): # path blocked
-                        break
-        if piece == 'r' or piece == 'q':
-            for i in range(1, col + 1): # left
-                if is_bound(row, col - i):
-                    if not is_same(row, col - i): # empty or kill
-                        valid_moves.append((row, col - i))
-                    if not is_empty(row, col - i): # path blocked
-                        break
-            for i in range(1, row + 1): # top
-                if is_bound(row - i, col):
-                    if not is_same(row - i, col): # empty or kill
-                        valid_moves.append((row - i, col))
-                    if not is_empty(row - i, col): # path blocked
-                        break
-            for i in range(1, (7 - col) + 1): # right
-                if is_bound(row, col + i):
-                    if not is_same(row, col + i): # empty or kill
-                        valid_moves.append((row, col + i))
-                    if not is_empty(row, col + i): # path blocked
-                        break
-            for i in range(1, (7 - row) + 1): # bottom
-                if is_bound(row + i, col):
-                    if not is_same(row + i, col): # empty or kill
-                        valid_moves.append((row + i, col))
-                    if not is_empty(row + i, col): # path blocked
-                        break
-        if piece == 'k':
-            if is_bound(row - 1, col - 1) and not is_same(row - 1, col - 1):
-                valid_moves.append((row - 1, col - 1))
-            if is_bound(row - 1, col) and not is_same(row - 1, col):
+        if color == 'w':
+            if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move
+                valid_moves.append((row - 2, col))
+            if is_bound(row - 1, col) and is_empty(row - 1, col): # straight
                 valid_moves.append((row - 1, col))
-            if is_bound(row - 1, col + 1) and not is_same(row - 1, col + 1):
+            if is_bound(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
+                valid_moves.append((row - 1, col - 1))
+            if is_bound(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
                 valid_moves.append((row - 1, col + 1))
-            if is_bound(row, col - 1) and not is_same(row, col - 1):
-                valid_moves.append((row, col - 1))
-            if is_bound(row, col + 1) and not is_same(row, col + 1):
-                valid_moves.append((row, col + 1))
-            if is_bound(row + 1, col - 1) and not is_same(row + 1, col - 1):
-                valid_moves.append((row + 1, col - 1))
-            if is_bound(row + 1, col) and not is_same(row + 1, col):
+        else:
+            # only black pawn needs to be handled based on color as it moves in different direction
+            if row == 1 and is_empty(row + 1, col) and is_empty(row + 2, col): # first double move
+                valid_moves.append((row + 2, col))
+            if is_bound(row + 1, col) and is_empty(row + 1, col): # straight
                 valid_moves.append((row + 1, col))
-            if is_bound(row + 1, col + 1) and not is_same(row + 1, col + 1):
+            if is_bound(row + 1, col - 1) and is_opposite(row + 1, col - 1): # kill
+                valid_moves.append((row + 1, col - 1))
+            if is_bound(row + 1, col + 1) and is_opposite(row + 1, col + 1): # kill
                 valid_moves.append((row + 1, col + 1))
         return valid_moves
-
-    @staticmethod
-    def display(data: Union[str, _BOARD], reverse_board: bool = False, flush: bool = False) -> None:
-        if type(data) == str:
-            board = chessmenBoard.fen2board(data)
-        else:
-            board = data
-        if flush:
-            os.system('clear')
-        if reverse_board:
-            board = chessmenBoard.flip_board(board)
-        row_sep = '  ' + '=====' * 8 + '='
-        for row in range(8):
-            print(row_sep)
-            for col in range(8):
-                if col == 0:
-                    print(str(8 - row) if not reverse_board else str(row + 1), end=' ')
-                back = '-' if (row + col) % 2 else ' '
-                piece = board[row][col] if board[row][col] != ' ' else back * 2
-                print(f'|{back}{piece}{back}', end='')
-                if col == 7:
-                    print('|')
-            if row == 7:
-                print(row_sep)
-        l_not = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        print('    '.join([''] + (l_not if not reverse_board else l_not[::-1])))
-
-    @staticmethod
-    def prompt_user(prompt: str, board: _BOARD, turn: str) -> Optional[Tuple[_COORD, _COORD]]:
-        inp = input(f"{prompt}> ").strip().lower().split()
-        if len(inp) == 2:
-            st, en = inp
-            check_pos = lambda pos: len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8'
-            if check_pos(st) and check_pos(en):
-                st_coord, en_coord = chessmenBoard.pos2coord(st), chessmenBoard.pos2coord(en)
-                if board[st_coord[0]][st_coord[1]] == ' ' or board[st_coord[0]][st_coord[1]][1] != turn:
-                    return st_coord, en_coord
-                else:
-                    print("invalid position (empty or opp)")
-            else:
-                print("invalid position")
-        else:
-            print("invalid format")
-        return None
     
     @staticmethod
-    def update_board(board: _BOARD, st_coord: _COORD, en_coord: _COORD, reverse_board: bool = False) -> Optional[_BOARD]:
-        valid_moves = chessmenBoard.get_valid_moves(board, st_coord, reverse_board=reverse_board)
-        if en_coord in valid_moves:
-            board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
-            board[st_coord[0]][st_coord[1]] = ' '
-            return board
-        else:
-            print("invalid move, valid:", ' '.join([chessmenBoard.coord2pos(move) for move in valid_moves]))
-            return None
+    def moves_for_knight(coord: COORD, board: BOARD) -> List[COORD]:
+        row, col = coord
+        piece, color = board[row][col]
+        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
+        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
+        valid_moves = []
+        if is_bound(row - 2, col - 1) and not is_same(row - 2, col - 1):
+            valid_moves.append((row - 2, col - 1))
+        if is_bound(row - 2, col + 1) and not is_same(row - 2, col + 1):
+            valid_moves.append((row - 2, col + 1))
+        if is_bound(row - 1, col - 2) and not is_same(row - 1, col - 2):
+            valid_moves.append((row - 1, col - 2))
+        if is_bound(row - 1, col + 2) and not is_same(row - 1, col + 2):
+            valid_moves.append((row - 1, col + 2))
+        if is_bound(row + 1, col - 2) and not is_same(row + 1, col - 2):
+            valid_moves.append((row + 1, col - 2))
+        if is_bound(row + 1, col + 2) and not is_same(row + 1, col + 2):
+            valid_moves.append((row + 1, col + 2))
+        if is_bound(row + 2, col - 1) and not is_same(row + 2, col - 1):
+            valid_moves.append((row + 2, col - 1))
+        if is_bound(row + 2, col + 1) and not is_same(row + 2, col + 1):
+            valid_moves.append((row + 2, col + 1))
+        return valid_moves
     
     @staticmethod
-    def run_offline_multiplayer(fen: str = _START_FEN, turn: _COLOR = "white"):
-        board = chessmenBoard.fen2board(fen)
-        while True:
-            chessmenBoard.display(board, (turn == "black"), flush=True)
-            inp = chessmenBoard.prompt_user(f"({turn})", board, turn)
-            if inp != None:
-                st_coord, en_coord = inp
-                new_board = chessmenBoard.update_board(board, st_coord, en_coord, (turn == "black"))
-                if new_board != None:
-                    turn = chessmenBoard.flip_turn(turn)
+    def moves_for_bishop(coord: COORD, board: BOARD) -> List[COORD]:
+        row, col = coord
+        piece, color = board[row][col]
+        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
+        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
+        is_empty = lambda r, c: board[r][c] == ' '
+        valid_moves = []
+        for i in range(1, min(row, col) + 1): # left top
+            if is_bound(row - i, col - i):
+                if not is_same(row - i, col - i): # empty or kill
+                    valid_moves.append((row - i, col - i))
+                if not is_empty(row - i, col - i): # path blocked
+                    break
+        for i in range(1, min(row, 7 - col) + 1): # right top
+            if is_bound(row - i, col + i):
+                if not is_same(row - i, col + i): # empty or kill
+                    valid_moves.append((row - i, col + i))
+                if not is_empty(row - i, col + i): # path blocked
+                    break
+        for i in range(1, min(7 - row, col) + 1): # bottom left
+            if is_bound(row + i, col - i):
+                if not is_same(row + i, col - i): # empty or kill
+                    valid_moves.append((row + i, col - i))
+                if not is_empty(row + i, col - i): # path blocked
+                    break
+        for i in range(1, min(7 - row, 7 - col) + 1): # bottom right
+            if is_bound(row + i, col + i):
+                if not is_same(row + i, col + i): # empty or kill
+                    valid_moves.append((row + i, col + i))
+                if not is_empty(row + i, col + i): # path blocked
+                    break
+        return valid_moves
+    
+    @staticmethod
+    def moves_for_rook(coord: COORD, board: BOARD) -> List[COORD]:
+        row, col = coord
+        piece, color = board[row][col]
+        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
+        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
+        is_empty = lambda r, c: board[r][c] == ' '
+        valid_moves = []
+        for i in range(1, col + 1): # left
+            if is_bound(row, col - i):
+                if not is_same(row, col - i): # empty or kill
+                    valid_moves.append((row, col - i))
+                if not is_empty(row, col - i): # path blocked
+                    break
+        for i in range(1, row + 1): # top
+            if is_bound(row - i, col):
+                if not is_same(row - i, col): # empty or kill
+                    valid_moves.append((row - i, col))
+                if not is_empty(row - i, col): # path blocked
+                    break
+        for i in range(1, (7 - col) + 1): # right
+            if is_bound(row, col + i):
+                if not is_same(row, col + i): # empty or kill
+                    valid_moves.append((row, col + i))
+                if not is_empty(row, col + i): # path blocked
+                    break
+        for i in range(1, (7 - row) + 1): # bottom
+            if is_bound(row + i, col):
+                if not is_same(row + i, col): # empty or kill
+                    valid_moves.append((row + i, col))
+                if not is_empty(row + i, col): # path blocked
+                    break
+        return valid_moves
+    
+    @staticmethod
+    def moves_for_queen(coord: COORD, board: BOARD) -> List[COORD]:
+        valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board)
+        valid_moves += chessmenBoardUtility.moves_for_rook(coord, board)
+        return valid_moves
+    
+    @staticmethod
+    def moves_for_king(coord: COORD, board: BOARD) -> List[COORD]:
+        row, col = coord
+        piece, color = board[row][col]
+        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
+        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
+        valid_moves = []
+        if is_bound(row - 1, col - 1) and not is_same(row - 1, col - 1):
+            valid_moves.append((row - 1, col - 1))
+        if is_bound(row - 1, col) and not is_same(row - 1, col):
+            valid_moves.append((row - 1, col))
+        if is_bound(row - 1, col + 1) and not is_same(row - 1, col + 1):
+            valid_moves.append((row - 1, col + 1))
+        if is_bound(row, col - 1) and not is_same(row, col - 1):
+            valid_moves.append((row, col - 1))
+        if is_bound(row, col + 1) and not is_same(row, col + 1):
+            valid_moves.append((row, col + 1))
+        if is_bound(row + 1, col - 1) and not is_same(row + 1, col - 1):
+            valid_moves.append((row + 1, col - 1))
+        if is_bound(row + 1, col) and not is_same(row + 1, col):
+            valid_moves.append((row + 1, col))
+        if is_bound(row + 1, col + 1) and not is_same(row + 1, col + 1):
+            valid_moves.append((row + 1, col + 1))
+        return valid_moves
+    
+    @staticmethod
+    def update_board(board: BOARD, st_coord: COORD, en_coord: COORD, return_copy: bool = False) -> BOARD:
+        if return_copy:
+            board = deepcopy(board)
+        board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
+        board[st_coord[0]][st_coord[1]] = ' '
+        return board
+    
+    @staticmethod
+    def can_piece_reach_target(coord: COORD, board: BOARD, check_color: str = 'w') -> bool:
+        ...
+
+    @staticmethod
+    def filter_moves_on_king_check(moves: List[COORD], board: BOARD, check_color: str = 'w') -> List[COORD]:
+        valid_moves = []
+        ...
+
+    @staticmethod
+    def moves_for_piece(coord: COORD, board: BOARD, get_notation: bool = False) -> Union[List[COORD], List[NOTATION]]:
+        row, col = coord
+        piece, color = board[row][col]
+        if piece == 'p':
+            valid_moves = chessmenBoardUtility.moves_for_pawn(coord, board)
+        elif piece == 'n':
+            valid_moves = chessmenBoardUtility.moves_for_knight(coord, board)
+        elif piece == 'b':
+            valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board)
+        elif piece == 'r':
+            valid_moves = chessmenBoardUtility.moves_for_rook(coord, board)
+        elif piece == 'q':
+            valid_moves = chessmenBoardUtility.moves_for_queen(coord, board)
+        else:
+            valid_moves = chessmenBoardUtility.moves_for_king(coord, board)
+        if get_notation:
+            valid_moves = [chessmenBoardUtility.coord2notation(move) for move in valid_moves]
+        return valid_moves

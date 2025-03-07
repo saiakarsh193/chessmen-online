@@ -5,7 +5,6 @@ import hashlib
 import threading
 from typing import Dict, Tuple, Union, Any
 
-
 class sharedMem:
     """ sharedMem is a small wrapper on threading mutex object """
     def __init__(self, data: Any) -> None:

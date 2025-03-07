@@ -1,66 +1,68 @@
 import socket
-from typing import Optional, Tuple, List, Any
+from typing import Optional, Tuple, List
+
+from .engine import FEN, PIECE_COLOR
 from .utils import get_env, random_hash, string_hash
 
 IP_ADDR, PORT, BUFFER_SIZE, SERVER_HASH = get_env()
+MAX_USERNAME_LEN = 20
 
 class chessmenClient:
-    MAX_USER_LEN = 20
-
     def __init__(self, user_id: str = None, server_password: str = None) -> None:
         if user_id:
-            self.user_id = "player_" + user_id.replace(':', '').replace('|', '').replace(' ', '_')[: self.MAX_USER_LEN]
+            self.user_id = "player_" + user_id.replace(':', '').replace('|', '').replace(' ', '_')[: MAX_USERNAME_LEN]
         else:
-            self.user_id = "guest_" + random_hash(self.MAX_USER_LEN)
+            self.user_id = "guest_" + random_hash(MAX_USERNAME_LEN)
         self.is_admin = False
         if server_password and string_hash(server_password) == SERVER_HASH:
             self.is_admin = True
 
-    def find_game(self) -> bool:
-        status, payload = self.request("find_game", [])
-        if status == "success":
-            return True
-        else:
-            print(payload)
-            return False
-
-    def status(self) -> Optional[Tuple[str, Optional[Tuple[str, str, str]]]]:
-        status, payload = self.request("status", [])
-        if status == "success":
-            payload = payload.split("|")
-            if payload[0] == "in_queue":
-                return payload[0], None
-            else:
-                fen, white_player, black_player, turn = payload[1: ]
-                user_side = "white" if white_player == self.user_id else "black"
-                return payload[0], (fen, user_side, turn)
-        else:
-            print(payload)
-            return None
-    
-    def update(self, fen: str) -> bool:
-        status, payload = self.request("update", [fen])
-        if status == "success":
-            return True
-        else:
-            print(payload)
-            return False
-
     def kill_server(self) -> bool:
         if self.is_admin:
-            status, payload = self.request("killserver", [])
+            status, payload = self.request("KILLSWITCH")
             print(payload)
             return True if status == "success" else False
         else:
             print("client does not have access to kill server")
             return False
 
-    def request(self, request_type: str, args: List[str]) -> Tuple[str, str]:
+    def find_match(self) -> bool:
+        status, payload = self.request("FIND_MATCH")
+        if status == "success":
+            return True
+        else:
+            print(payload)
+            return False
+
+    def status_match(self) -> Optional[Tuple[str, Optional[Tuple[FEN, PIECE_COLOR, PIECE_COLOR]]]]:
+        status, payload = self.request("STATUS_MATCH")
+        if status == "success":
+            payload = payload.split("|")
+            if payload[0] == "in_queue":
+                return payload[0], None
+            else:
+                fen, white_user_id, black_user_id, turn = payload[1: ]
+                user_color = "white" if white_user_id == self.user_id else "black"
+                return payload[0], (fen, user_color, turn)
+        else:
+            print(payload)
+            return None
+    
+    def update_match(self, fen: FEN) -> bool:
+        status, payload = self.request("UPDATE_MATCH", [fen])
+        if status == "success":
+            return True
+        else:
+            print(payload)
+            return False
+
+    def request(self, request_type: str, args: List[str] = []) -> Tuple[str, str]:
         server = socket.socket()
         try:
             server.connect((IP_ADDR, PORT)) # connect to server
             # print(f"client user ({self.user_id}) connected to server ({IP_ADDR}:{PORT})")
-            server.send(f"{self.user_id}::{request_type}::{'|'.join(args)}".encode())
+            args = '|'.join(args)
+            server.send(f"{request_type}::{self.user_id}::{args}".encode())
             status, payload = server.recv(BUFFER_SIZE).decode().split("::")
             server.close() # disconnect from server
             # print(f"disconnected from server with status {status}")
