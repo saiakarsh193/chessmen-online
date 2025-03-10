@@ -258,8 +258,13 @@ class chessmenGUI(Avour):
             # status: in_queue or in_match
             if status == 'in_match':
                 fen, user_color, turn = payload
+                # if there is a waiting response from user
+                # send it to server and clear it
                 if self.board.response_ready:
                     self.client.update_match(self.board.get_board())
+                    self.board.response_ready = False
+                    return
+                # set board variables (including user_turn, response_ready)
                 self.board.set_board(
                     fen=fen,
                     user_color=user_color,
