@@ -1,13 +1,13 @@
 # Chessmen-Online
 
-Multiplayer chess that two players can play over LAN. Supports both CLI based and [P5JS](https://p5js.org/)-Flask GUI based gameplay. Use CLI for simple old-school terminal based interface. Use GUI for a more modern interactive interface.
+Multiplayer chess that two players can play over LAN. Supports both CLI based and [Avour](https://github.com/saiakarsh193/avour) GUI based gameplay. Use CLI for simple old-school terminal based interface. Use GUI for a more modern interactive interface. Checkout [git submodule](https://github.blog/open-source/git/working-with-submodules/) for more info on recursive cloning.
 
 > The sprites and GUI were taken and inspired by [chess.com](https://www.chess.com/).  
 
 ## Installation
 Clone the [repo](https://github.com/saiakarsh193/chessmen-online/)
 ```bash
-git clone https://github.com/saiakarsh193/chessmen-online/
+git clone --recursive https://github.com/saiakarsh193/chessmen-online/
 cd chessmen-online
 python3 -m pip install -r requirements.txt
 ```
@@ -24,7 +24,7 @@ python3 cli.py <username>
 
 To start GUI,
 ```bash
-python3 app.py
+python3 gui.py <username>
 ```
 ![gui_chess](/imgs/gui_chess.png)
 
