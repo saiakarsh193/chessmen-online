@@ -8,9 +8,9 @@ from chessmen import chessmenClient, chessmenBoardUtility as CBU, COORD, BOARD, 
 class chessmenCLI:
     REFRESH_TIME = 1 # seconds
 
-    def __init__(self, name: str):
-        self.client = chessmenClient(user_id=name)
-        self.username = self.client.user_id
+    def __init__(self, user_id: str) -> None:
+        self.client = chessmenClient(user_id=user_id)
+        self.user_id = self.client.user_id
         assert self.client.find_match()
 
     def display(self, board: BOARD, black_side_view: bool = False, flush: bool = False) -> None:
@@ -50,7 +50,7 @@ class chessmenCLI:
             column_marker.reverse()
         print('    '.join([''] + column_marker))
     
-    def prompt_user(self, prompt: str, board: BOARD, user_side: PIECE_COLOR) -> Tuple[COORD, COORD]:
+    def prompt_user(self, prompt: str, board: BOARD, user_color: PIECE_COLOR) -> Tuple[COORD, COORD]:
         while True:
             inp = input(f'{prompt}> ').strip().lower().split()
             if len(inp) == 2:
@@ -61,10 +61,10 @@ class chessmenCLI:
                     piece = board[st_coord[0]][st_coord[1]]
                     if piece == ' ':
                         print('no piece selected')
-                    elif piece[1] != user_side[0]: # matching color
+                    elif piece[1] != user_color[0]: # matching color
                         print('opposite piece selected')
                     else:
-                        valid_moves = CBU.moves_for_piece(st_coord, board, get_notation=True)
+                        valid_moves = CBU.get_valid_moves(st_coord, board, get_notation=True)
                         if en_notation in valid_moves:
                             return st_coord, en_coord
                         else:
@@ -77,24 +77,26 @@ class chessmenCLI:
     def run(self):
         while True:
             status = self.client.status_match()
-            if status == None:
+            if status == None: # match does not exist / has stopped
                 break
             status, payload = status
-            if status == "in_match": # otherwise still waiting for match
-                fen, user_side, turn = payload
+            # status: in_queue or in_match
+            if status == 'in_match':
+                fen, user_color, turn = payload
                 board = CBU.convert_fen2board(fen)
-                self.display(board, black_side_view=(user_side == 'black'), flush=True)
-                if user_side == turn:
-                    st_coord, en_coord = self.prompt_user(f"({self.username}-{user_side})", board, user_side)
+                self.display(board, black_side_view=(user_color == 'black'), flush=True)
+                if user_color == turn:
+                    st_coord, en_coord = self.prompt_user(f"({self.user_id}-{user_color})", board, user_color)
                     new_board = CBU.update_board(board, st_coord, en_coord)
-                    self.display(new_board, black_side_view=(user_side == 'black'), flush=True)
+                    self.display(new_board, black_side_view=(user_color == 'black'), flush=True)
                     new_fen = CBU.convert_board2fen(new_board)
                     self.client.update_match(new_fen)
             time.sleep(self.REFRESH_TIME)
 
-parser = argparse.ArgumentParser(description="chessmen client CLI interface")
-parser.add_argument("username", help="username for client", type=str)
-args = parser.parse_args()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='chessmen client CLI interface')
+    parser.add_argument('user_id', help='username for client', type=str)
+    args = parser.parse_args()
 
-cli = chessmenCLI(args.username)
-cli.run()
+    cli = chessmenCLI(args.user_id)
+    cli.run()

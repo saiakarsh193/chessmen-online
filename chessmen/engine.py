@@ -255,7 +255,7 @@ class chessmenBoardUtility:
         ...
 
     @staticmethod
-    def moves_for_piece(coord: COORD, board: BOARD, get_notation: bool = False) -> Union[List[COORD], List[NOTATION]]:
+    def get_valid_moves(coord: COORD, board: BOARD, get_notation: bool = False) -> Union[List[COORD], List[NOTATION]]:
         row, col = coord
         piece, color = board[row][col]
         if piece == 'p':
@@ -273,3 +273,18 @@ class chessmenBoardUtility:
         if get_notation:
             valid_moves = [chessmenBoardUtility.coord2notation(move) for move in valid_moves]
         return valid_moves
+    
+    @staticmethod
+    def get_target_moves(valid_moves: Union[List[COORD], List[NOTATION]], board: BOARD, user_color: PIECE_COLOR) -> Union[List[COORD], List[NOTATION]]:
+        target_moves = []
+        for move in valid_moves:
+            if isinstance(move, NOTATION):
+                coord = chessmenBoardUtility.notation2coord(move)
+            else:
+                coord = move
+            row, col = coord
+            piece, color = board[row][col]
+            if color != user_color:
+                target_moves.append(move)
+        return target_moves
+
