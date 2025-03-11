@@ -159,15 +159,18 @@ class chessmenServer:
             args = args.split('|') if args else []
             print(f"{request_type} [{date}] {user_id} ({address})")
 
+            # refresh the server before processing request
+            if time.time() - self.last_refresh_time >= SERVER_MIN_REFRESH_TIME:
+                self.last_refresh_time = time.time()
+                self.refresh()
+
+            # special kill command to stop server remotely
             if request_type == "KILLSWITCH":
                 client.send("success::killing server".encode())
                 client.close()
                 break
+            # handling client requests
             else:
                 status, payload = self.handle_request(request_type, user_id, args)
                 client.send(f"{status}::{payload}".encode())
                 client.close()
-            
-            if time.time() - self.last_refresh_time >= SERVER_MIN_REFRESH_TIME:
-                self.last_refresh_time = time.time()
-                self.refresh()

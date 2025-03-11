@@ -1,6 +1,6 @@
 import time
 import argparse
-from typing import List
+from typing import List, Optional
 
 from pyglet import image
 from avour import Avour, COORD2FLOAT
@@ -30,6 +30,11 @@ class chessmenBoard:
         self.C_WHITE = (238, 239, 211)
         self.C_BLACK = (38, 36, 34)
         self.C_VALID = (100, 100, 100, 120)
+
+        # misc variables
+        self.wait_dot_count = 0
+        self.wait_dot_last_update = time.time()
+        self.wait_dot_update_interval = 0.5 # seconds
 
         # mouse drag variables
         self.selected_coord: COORD = None
@@ -68,14 +73,30 @@ class chessmenBoard:
 
     def get_board(self) -> FEN:
         return CBU.convert_board2fen(self.board)
+    
+    def draw_wait_screen(self, avour: Avour) -> None:
+        avour.color(self.C_WHITE)
+        text = 'waiting for match '
+        text_width = avour._text_width(text, font_size=25)
+        avour.text(text + ('.' * self.wait_dot_count), (-text_width / 2, 0), font_size=25, anchor_x='left')
+        if time.time() - self.wait_dot_last_update > self.wait_dot_update_interval:
+            self.wait_dot_count = (self.wait_dot_count + 1) % 5
+            self.wait_dot_last_update = time.time()
 
-    def draw(self, avour: Avour) -> None:
+    def draw(self, avour: Avour, status: Optional[str]) -> None:
         # background
         avour.background(self.C_BLACK)
 
-        if self.board == None:
+        # match does not exist
+        if status == None:
             return
 
+        # still waiting for match
+        if status == 'in_queue':
+            self.draw_wait_screen(avour)
+            return
+
+        # else status is 'in_match': found a match
         # board
         avour.fill(True)
         for row in range(8):
@@ -234,6 +255,7 @@ class chessmenGUI(Avour):
         self.board = chessmenBoard(user_id=self.client.user_id)
         assert self.client.find_match()
 
+        self.last_status = None
         self.last_status_time = time.time()
 
     def on_keydown(self, key: str) -> None:
@@ -247,7 +269,7 @@ class chessmenGUI(Avour):
         self.board.on_mousedown(pos)
 
     def draw(self) -> None:
-        self.board.draw(self)
+        self.board.draw(self, status=self.last_status)
 
     def loop(self, dt: float) -> None:
         if time.time() - self.last_status_time > self.REFRESH_TIME:
@@ -270,6 +292,7 @@ class chessmenGUI(Avour):
                     user_color=user_color,
                     turn=turn
                 )
+            self.last_status = status
             self.last_status_time = time.time()
 
 if __name__ == '__main__':
