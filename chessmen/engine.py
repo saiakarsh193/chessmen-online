@@ -1,36 +1,85 @@
-from copy import deepcopy
-from typing import List, Tuple, Optional, Literal, Union
+from dataclasses import dataclass
+from typing import List, Tuple, Optional, Literal, Union, Callable
 
 FEN = str
 BOARD = List[List[str]]
 COORD = Tuple[int, int]
 NOTATION = str
 
-START_FEN: FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'
+START_FEN: FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 PIECE_COLOR = Literal['black', 'white']
+PIECE_COLOR_MAP = {'b': 'black', 'w': 'white'}
+MOVE_TYPE = Literal['normal', 'enable_en_passant', 'en_passant', 'disable_castling', 'castling']
+
+@dataclass
+class chessmenMove:
+    target_coord: COORD
+    start_coord: Optional[COORD] = None
+    move_type: MOVE_TYPE = 'normal'
+    extra_coord: Optional[COORD] = None
+
+    def notation(self) -> str:
+        return chessmenBoardUtility.coord2notation(self.target_coord)
+
+@dataclass
+class chessmenBoardState:
+    # FEN: Forsyth–Edwards Notation (https://en.wikipedia.org/wiki/Forsyth–Edwards_Notation)
+
+    board: BOARD
+    active_color: PIECE_COLOR
+    castling_availability: str
+    en_passant_target: NOTATION
+    half_moves: int
+    full_moves: int
+
+    def update(self, move: chessmenMove) -> None:
+        assert move.start_coord != None
+        # move the main piece
+        self.board[move.target_coord[0]][move.target_coord[1]] = self.board[move.start_coord[0]][move.start_coord[1]]
+        self.board[move.start_coord[0]][move.start_coord[1]] = ' '
+        # set the flags and update state
+        # move the extra piece (en passant or castling)
+        # switch the active color
+        self.switch_active_color()
+
+    def update_board(self, st_coord: COORD, en_coord: COORD) -> None:
+        self.board[en_coord[0]][en_coord[1]] = self.board[st_coord[0]][st_coord[1]]
+        self.board[st_coord[0]][st_coord[1]] = ' '
+
+    def switch_active_color(self) -> None:
+        self.active_color = 'black' if self.active_color == 'white' else 'white'
+        if self.active_color == 'white': # update full move after black's move
+            self.full_moves += 1
+    
+    def update_castling_availability(self, piece: str) -> None:
+        castling_availability = list(self.castling_availability)
+        if piece in castling_availability:
+            castling_availability.remove(piece)
+        if len(castling_availability) == 0:
+            castling_availability = ['-']
+        self.castling_availability = ''.join(castling_availability)
+
+    def update_en_passant_target(self, pos: Optional[NOTATION] = None) -> None:
+        self.en_passant_target = '-' if pos == None else pos
 
 class chessmenBoardUtility:
     @staticmethod
-    def convert_fen2board(fen: FEN) -> BOARD:
-        # upper case is white
-        # lower case is black
-        # we convert all numbers into empty spaces
-        bfen = []
-        for row in fen.split('/'):
-            cfen = []
+    def board_string2board(board_str: str) -> BOARD:
+        board = []
+        rows = board_str.split('/')
+        for row in rows:
+            board_row = []
             for col in row:
-                if col >= '1' and col <= '8':
-                    cfen += [' '] * int(col)
+                if col.isdigit():
+                    board_row += [' '] * int(col)
                 else:
-                    cfen.append(col.lower() + ('w' if col.isupper() else 'b'))
-            bfen.append(cfen)
-        return bfen
+                    board_row.append(col)
+            board.append(board_row)
+        return board
 
     @staticmethod
-    def convert_board2fen(board: BOARD) -> FEN:
-        # we convert all empty spaces into numbers
-        # notation if from top left to bottom right
-        fen = ''
+    def board2board_string(board: BOARD) -> str:
+        board_str = []
         for row in board:
             ctr = 0
             for i, col in enumerate(row):
@@ -38,12 +87,35 @@ class chessmenBoardUtility:
                     ctr += 1
                 if col != ' ' or i == 7:
                     if ctr > 0:
-                        fen += str(ctr)
+                        board_str.append(str(ctr))
                     if col != ' ':
-                        fen += col[0].upper() if col[1] == 'w' else col[0]
+                        board_str.append(col)
                     ctr = 0
-            fen += '/'
-        return fen[: -1]
+            board_str.append('/')
+        return ''.join(board_str[: -1])
+
+    @staticmethod
+    def fen2board_state(fen: FEN) -> chessmenBoardState:
+        board_str, active_color, castling_availability, en_passant_target, half_moves, full_moves = fen.split()
+        return chessmenBoardState(
+            board=chessmenBoardUtility.board_string2board(board_str=board_str),
+            active_color=PIECE_COLOR_MAP[active_color],
+            castling_availability=castling_availability,
+            en_passant_target=en_passant_target,
+            half_moves=int(half_moves),
+            full_moves=int(full_moves)
+        )
+
+    @staticmethod
+    def board_state2fen(board_state: chessmenBoardState) -> FEN:
+        return ' '.join([
+            chessmenBoardUtility.board2board_string(board=board_state.board),
+            board_state.active_color[0],
+            board_state.castling_availability,
+            board_state.en_passant_target,
+            str(board_state.half_moves),
+            str(board_state.full_moves)
+        ])
     
     # standard notation
     # 8 r n b q k b n r    ->    BLACK
@@ -58,12 +130,12 @@ class chessmenBoardUtility:
 
     # board representation
     # (0, 0)     ->    (0, 7)
-    # rb
+    # r
     #
     #
     #
     #
-    # rw
+    # R
     # (7, 0)     ->    (7, 7)
 
     @staticmethod
@@ -80,173 +152,246 @@ class chessmenBoardUtility:
     def verify_notation(pos: NOTATION) -> bool:
         return len(pos) == 2 and pos[0] >= 'a' and pos[0] <= 'h' and pos[1] >= '1' and pos[1] <= '8'
     
-    @ staticmethod
+    @staticmethod
     def verify_coord(coord: COORD) -> bool:
         return coord[0] >= 0 and coord[0] <= 7 and coord[1] >= 0 and coord[1] <= 7
     
     @staticmethod
-    def moves_for_pawn(coord: COORD, board: BOARD) -> List[COORD]:
+    def _get_color(coord: COORD, board: BOARD) -> Optional[PIECE_COLOR]:
+        if board[coord[0]][coord[1]] == ' ':
+            return None
+        elif board[coord[0]][coord[1]].islower():
+            return 'black'
+        return 'white'
+    
+    @staticmethod
+    def _is_inside(coord: COORD) -> bool:
+        return chessmenBoardUtility.verify_coord(coord)
+        
+    @staticmethod
+    def _is_empty(coord: COORD, board: BOARD) -> bool:
+        return board[coord[0]][coord[1]] == ' '
+    
+    @staticmethod
+    def _is_same(coord: COORD, target_coord: COORD, board: BOARD) -> bool:
+        c1 = chessmenBoardUtility._get_color(coord, board)
+        c2 = chessmenBoardUtility._get_color(target_coord, board)
+        # both should be pieces and same
+        if c1 == None or c2 == None:
+            return False
+        return c1 == c2
+    
+    @staticmethod
+    def _is_opposite(coord: COORD, target_coord: COORD, board: BOARD) -> bool:
+        c1 = chessmenBoardUtility._get_color(coord, board)
+        c2 = chessmenBoardUtility._get_color(target_coord, board)
+        # both should be pieces and not same
+        if c1 == None or c2 == None:
+            return False
+        return c1 != c2
+    
+    @staticmethod
+    def moves_for_pawn(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
-        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
-        is_empty = lambda r, c: board[r][c] == ' '
-        is_opposite = lambda r, c: board[r][c] != ' ' and board[r][c][1] != color
-        valid_moves = []
-        if color == 'w':
-            if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move
-                valid_moves.append((row - 2, col))
-            if is_bound(row - 1, col) and is_empty(row - 1, col): # straight
-                valid_moves.append((row - 1, col))
-            if is_bound(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
-                valid_moves.append((row - 1, col - 1))
-            if is_bound(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
-                valid_moves.append((row - 1, col + 1))
+        board = board_state.board
+        get_color = lambda r, c: chessmenBoardUtility._get_color((r, c), board)
+        is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
+        is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
+        is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
+        valid_moves: List[chessmenMove] = []
+        if get_color(row, col) == 'white':
+            if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move -> enable en passant
+                valid_moves.append(chessmenMove((row - 2, col), move_type='enable_en_passant', extra_coord=(row - 1, col)))
+            if board_state.en_passant_target != '-' and row == 3: # possible en passant
+                en_passant_target = chessmenBoardUtility.notation2coord(board_state.en_passant_target)
+                if is_inside(row - 1, col - 1) and is_empty(row - 1, col - 1) and en_passant_target == (row - 1, col - 1):
+                    valid_moves.append(chessmenMove((row - 1, col - 1), move_type='en_passant', extra_coord=(row, col - 1)))
+                if is_inside(row - 1, col + 1) and is_empty(row - 1, col + 1) and en_passant_target == (row - 1, col + 1):
+                    valid_moves.append(chessmenMove((row - 1, col + 1), move_type='en_passant', extra_coord=(row, col + 1)))
+            if is_inside(row - 1, col) and is_empty(row - 1, col): # straight
+                valid_moves.append(chessmenMove((row - 1, col)))
+            if is_inside(row - 1, col - 1) and is_opposite(row - 1, col - 1): # kill
+                valid_moves.append(chessmenMove((row - 1, col - 1)))
+            if is_inside(row - 1, col + 1) and is_opposite(row - 1, col + 1): # kill
+                valid_moves.append(chessmenMove((row - 1, col + 1)))
         else:
-            # only black pawn needs to be handled based on color as it moves in different direction
-            if row == 1 and is_empty(row + 1, col) and is_empty(row + 2, col): # first double move
-                valid_moves.append((row + 2, col))
-            if is_bound(row + 1, col) and is_empty(row + 1, col): # straight
-                valid_moves.append((row + 1, col))
-            if is_bound(row + 1, col - 1) and is_opposite(row + 1, col - 1): # kill
-                valid_moves.append((row + 1, col - 1))
-            if is_bound(row + 1, col + 1) and is_opposite(row + 1, col + 1): # kill
-                valid_moves.append((row + 1, col + 1))
+            # only black pawn needs to be handled based on color as it moves in different direction than standard
+            if row == 1 and is_empty(row + 1, col) and is_empty(row + 2, col): # first double move -> enable en passant
+                valid_moves.append(chessmenMove((row + 2, col), move_type='enable_en_passant', extra_coord=(row + 1, col)))
+            if board_state.en_passant_target != '-' and row == 4: # possible en passant
+                en_passant_target = chessmenBoardUtility.notation2coord(board_state.en_passant_target)
+                if is_inside(row + 1, col - 1) and is_empty(row + 1, col - 1) and en_passant_target == (row + 1, col - 1):
+                    valid_moves.append(chessmenMove((row + 1, col - 1), move_type='en_passant', extra_coord=(row, col - 1)))
+                if is_inside(row + 1, col + 1) and is_empty(row + 1, col + 1) and en_passant_target == (row + 1, col + 1):
+                    valid_moves.append(chessmenMove((row + 1, col + 1), move_type='en_passant', extra_coord=(row, col + 1)))
+            if is_inside(row + 1, col) and is_empty(row + 1, col): # straight
+                valid_moves.append(chessmenMove((row + 1, col)))
+            if is_inside(row + 1, col - 1) and is_opposite(row + 1, col - 1): # kill
+                valid_moves.append(chessmenMove((row + 1, col - 1)))
+            if is_inside(row + 1, col + 1) and is_opposite(row + 1, col + 1): # kill
+                valid_moves.append(chessmenMove((row + 1, col + 1)))
+        for move in valid_moves:
+            move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def moves_for_knight(coord: COORD, board: BOARD) -> List[COORD]:
+    def moves_for_knight(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
-        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
-        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
-        valid_moves = []
-        if is_bound(row - 2, col - 1) and not is_same(row - 2, col - 1):
-            valid_moves.append((row - 2, col - 1))
-        if is_bound(row - 2, col + 1) and not is_same(row - 2, col + 1):
-            valid_moves.append((row - 2, col + 1))
-        if is_bound(row - 1, col - 2) and not is_same(row - 1, col - 2):
-            valid_moves.append((row - 1, col - 2))
-        if is_bound(row - 1, col + 2) and not is_same(row - 1, col + 2):
-            valid_moves.append((row - 1, col + 2))
-        if is_bound(row + 1, col - 2) and not is_same(row + 1, col - 2):
-            valid_moves.append((row + 1, col - 2))
-        if is_bound(row + 1, col + 2) and not is_same(row + 1, col + 2):
-            valid_moves.append((row + 1, col + 2))
-        if is_bound(row + 2, col - 1) and not is_same(row + 2, col - 1):
-            valid_moves.append((row + 2, col - 1))
-        if is_bound(row + 2, col + 1) and not is_same(row + 2, col + 1):
-            valid_moves.append((row + 2, col + 1))
+        board = board_state.board
+        is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
+        is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
+        is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
+        valid_moves: List[chessmenMove] = []
+        if is_inside(row - 2, col - 1) and (is_empty(row - 2, col - 1) or is_opposite(row - 2, col - 1)):
+            valid_moves.append(chessmenMove((row - 2, col - 1)))
+        if is_inside(row - 2, col + 1) and (is_empty(row - 2, col + 1) or is_opposite(row - 2, col + 1)):
+            valid_moves.append(chessmenMove((row - 2, col + 1)))
+        if is_inside(row - 1, col - 2) and (is_empty(row - 1, col - 2) or is_opposite(row - 1, col - 2)):
+            valid_moves.append(chessmenMove((row - 1, col - 2)))
+        if is_inside(row - 1, col + 2) and (is_empty(row - 1, col + 2) or is_opposite(row - 1, col + 2)):
+            valid_moves.append(chessmenMove((row - 1, col + 2)))
+        if is_inside(row + 1, col - 2) and (is_empty(row + 1, col - 2) or is_opposite(row + 1, col - 2)):
+            valid_moves.append(chessmenMove((row + 1, col - 2)))
+        if is_inside(row + 1, col + 2) and (is_empty(row + 1, col + 2) or is_opposite(row + 1, col + 2)):
+            valid_moves.append(chessmenMove((row + 1, col + 2)))
+        if is_inside(row + 2, col - 1) and (is_empty(row + 2, col - 1) or is_opposite(row + 2, col - 1)):
+            valid_moves.append(chessmenMove((row + 2, col - 1)))
+        if is_inside(row + 2, col + 1) and (is_empty(row + 2, col + 1) or is_opposite(row + 2, col + 1)):
+            valid_moves.append(chessmenMove((row + 2, col + 1)))
+        for move in valid_moves:
+            move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def moves_for_bishop(coord: COORD, board: BOARD) -> List[COORD]:
+    def _moves_linear_unblocked(coords: List[COORD], is_inside: Callable, is_empty: Callable, is_opposite: Callable) -> List[chessmenMove]:
+        valid_moves = []
+        for row, col in coords:
+            if is_inside(row, col):
+                if is_empty(row, col): # empty to move
+                    valid_moves.append(chessmenMove((row, col)))
+                else:
+                    if is_opposite(row, col): # kill
+                        valid_moves.append(chessmenMove((row, col)))
+                    break
+            else:
+                break
+        return valid_moves
+    
+    @staticmethod
+    def moves_for_bishop(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
-        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
-        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
-        is_empty = lambda r, c: board[r][c] == ' '
-        valid_moves = []
-        for i in range(1, min(row, col) + 1): # left top
-            if is_bound(row - i, col - i):
-                if not is_same(row - i, col - i): # empty or kill
-                    valid_moves.append((row - i, col - i))
-                if not is_empty(row - i, col - i): # path blocked
-                    break
-        for i in range(1, min(row, 7 - col) + 1): # right top
-            if is_bound(row - i, col + i):
-                if not is_same(row - i, col + i): # empty or kill
-                    valid_moves.append((row - i, col + i))
-                if not is_empty(row - i, col + i): # path blocked
-                    break
-        for i in range(1, min(7 - row, col) + 1): # bottom left
-            if is_bound(row + i, col - i):
-                if not is_same(row + i, col - i): # empty or kill
-                    valid_moves.append((row + i, col - i))
-                if not is_empty(row + i, col - i): # path blocked
-                    break
-        for i in range(1, min(7 - row, 7 - col) + 1): # bottom right
-            if is_bound(row + i, col + i):
-                if not is_same(row + i, col + i): # empty or kill
-                    valid_moves.append((row + i, col + i))
-                if not is_empty(row + i, col + i): # path blocked
-                    break
+        board = board_state.board
+        is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
+        is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
+        is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
+        valid_moves: List[chessmenMove] = []
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row - i, col - i) for i in range(1, min(row, col) + 1)], is_inside, is_empty, is_opposite) # left top
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row - i, col + i) for i in range(1, min(row, 7 - col) + 1)], is_inside, is_empty, is_opposite) # right top
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row + i, col - i) for i in range(1, min(7 - row, col) + 1)], is_inside, is_empty, is_opposite) # bottom left
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row + i, col + i) for i in range(1, min(7 - row, 7 - col) + 1)], is_inside, is_empty, is_opposite) # bottom right
+        for move in valid_moves:
+            move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def moves_for_rook(coord: COORD, board: BOARD) -> List[COORD]:
+    def _get_castling_move(color: PIECE_COLOR, board: BOARD, queen_side: bool = True) -> Optional[chessmenMove]:
+        row = 7 if color == 'white' else 0
+        cols = [0, 1, 2, 3, 4] if queen_side else [4, 5, 6, 7]
+        for i, col in enumerate(cols):
+            # all cols between rook and king should be empty
+            if i > 0 and i < len(cols) - 1:
+                if not chessmenBoardUtility._is_empty((row, col), board):
+                    return None
+            # check (row, col) should not be under check
+            pass
+        # only king can initiate castling
+        if queen_side:
+            return chessmenMove((row, 2), move_type='castling', extra_coord=(row, 3))
+        else:
+            return chessmenMove((row, 6), move_type='castling', extra_coord=(row, 5))
+    
+    @staticmethod
+    def moves_for_rook(coord: COORD, board_state: chessmenBoardState, for_queen: bool = False) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
-        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
-        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
-        is_empty = lambda r, c: board[r][c] == ' '
-        valid_moves = []
-        for i in range(1, col + 1): # left
-            if is_bound(row, col - i):
-                if not is_same(row, col - i): # empty or kill
-                    valid_moves.append((row, col - i))
-                if not is_empty(row, col - i): # path blocked
-                    break
-        for i in range(1, row + 1): # top
-            if is_bound(row - i, col):
-                if not is_same(row - i, col): # empty or kill
-                    valid_moves.append((row - i, col))
-                if not is_empty(row - i, col): # path blocked
-                    break
-        for i in range(1, (7 - col) + 1): # right
-            if is_bound(row, col + i):
-                if not is_same(row, col + i): # empty or kill
-                    valid_moves.append((row, col + i))
-                if not is_empty(row, col + i): # path blocked
-                    break
-        for i in range(1, (7 - row) + 1): # bottom
-            if is_bound(row + i, col):
-                if not is_same(row + i, col): # empty or kill
-                    valid_moves.append((row + i, col))
-                if not is_empty(row + i, col): # path blocked
-                    break
+        board = board_state.board
+        is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
+        is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
+        is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
+        valid_moves: List[chessmenMove] = []
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row, col - i) for i in range(1, col + 1)], is_inside, is_empty, is_opposite) # left
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row - i, col) for i in range(1, row + 1)], is_inside, is_empty, is_opposite) # top
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row, col + i) for i in range(1, (7 - col) + 1)], is_inside, is_empty, is_opposite) # right
+        valid_moves += chessmenBoardUtility._moves_linear_unblocked([(row + i, col) for i in range(1, (7 - row) + 1)], is_inside, is_empty, is_opposite) # bottom
+        if not for_queen:
+            # disable castling after moving the rook
+            for move in valid_moves:
+                move.move_type = 'disable_castling'
+                move.extra_coord = (row, col)
+        for move in valid_moves:
+            move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def moves_for_queen(coord: COORD, board: BOARD) -> List[COORD]:
-        valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board)
-        valid_moves += chessmenBoardUtility.moves_for_rook(coord, board)
+    def moves_for_queen(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
+        valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board_state)
+        valid_moves += chessmenBoardUtility.moves_for_rook(coord, board_state, for_queen=True)
         return valid_moves
     
     @staticmethod
-    def moves_for_king(coord: COORD, board: BOARD) -> List[COORD]:
+    def moves_for_king(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
-        is_bound = lambda r, c: (r >= 0 and r <= 7) and (c >= 0 and c <= 7)
-        is_same = lambda r, c: board[r][c] != ' ' and board[r][c][1] == color
-        valid_moves = []
-        if is_bound(row - 1, col - 1) and not is_same(row - 1, col - 1):
-            valid_moves.append((row - 1, col - 1))
-        if is_bound(row - 1, col) and not is_same(row - 1, col):
-            valid_moves.append((row - 1, col))
-        if is_bound(row - 1, col + 1) and not is_same(row - 1, col + 1):
-            valid_moves.append((row - 1, col + 1))
-        if is_bound(row, col - 1) and not is_same(row, col - 1):
-            valid_moves.append((row, col - 1))
-        if is_bound(row, col + 1) and not is_same(row, col + 1):
-            valid_moves.append((row, col + 1))
-        if is_bound(row + 1, col - 1) and not is_same(row + 1, col - 1):
-            valid_moves.append((row + 1, col - 1))
-        if is_bound(row + 1, col) and not is_same(row + 1, col):
-            valid_moves.append((row + 1, col))
-        if is_bound(row + 1, col + 1) and not is_same(row + 1, col + 1):
-            valid_moves.append((row + 1, col + 1))
+        board = board_state.board
+        is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
+        is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
+        is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
+        valid_moves: List[chessmenMove] = []
+        if is_inside(row - 1, col - 1) and (is_empty(row - 1, col - 1) or is_opposite(row - 1, col - 1)):
+            valid_moves.append(chessmenMove((row - 1, col - 1)))
+        if is_inside(row - 1, col)and (is_empty(row - 1, col) or is_opposite(row - 1, col)):
+            valid_moves.append(chessmenMove((row - 1, col)))
+        if is_inside(row - 1, col + 1) and (is_empty(row - 1, col + 1) or is_opposite(row - 1, col + 1)):
+            valid_moves.append(chessmenMove((row - 1, col + 1)))
+        if is_inside(row, col - 1) and (is_empty(row, col - 1) or is_opposite(row, col - 1)):
+            valid_moves.append(chessmenMove((row, col - 1)))
+        if is_inside(row, col + 1) and (is_empty(row, col + 1) or is_opposite(row, col + 1)):
+            valid_moves.append(chessmenMove((row, col + 1)))
+        if is_inside(row + 1, col - 1) and (is_empty(row + 1, col - 1) or is_opposite(row + 1, col - 1)):
+            valid_moves.append(chessmenMove((row + 1, col - 1)))
+        if is_inside(row + 1, col) and (is_empty(row + 1, col) or is_opposite(row + 1, col)):
+            valid_moves.append(chessmenMove((row + 1, col)))
+        if is_inside(row + 1, col + 1) and (is_empty(row + 1, col + 1) or is_opposite(row + 1, col + 1)):
+            valid_moves.append(chessmenMove((row + 1, col + 1)))
+        # disable castling after moving the king
+        for move in valid_moves:
+            move.move_type = 'disable_castling'
+            move.extra_coord = (row, col)
+        # for castling
+        get_color = lambda r, c: chessmenBoardUtility._get_color((r, c), board)
+        color = get_color(row, col)
+        if color == 'white':
+            if 'Q' in board_state.castling_availability:
+                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=True)
+                if move != None:
+                    valid_moves.append(move)
+            if 'K' in board_state.castling_availability:
+                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=False)
+                if move != None:
+                    valid_moves.append(move)
+        else:
+            if 'q' in board_state.castling_availability:
+                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=True)
+                if move != None:
+                    valid_moves.append(move)
+            if 'k' in board_state.castling_availability:
+                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=False)
+                if move != None:
+                    valid_moves.append(move)
+        for move in valid_moves:
+            move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def update_board(board: BOARD, st_coord: COORD, en_coord: COORD, return_copy: bool = False) -> BOARD:
-        if return_copy:
-            board = deepcopy(board)
-        board[en_coord[0]][en_coord[1]] = board[st_coord[0]][st_coord[1]]
-        board[st_coord[0]][st_coord[1]] = ' '
-        return board
-    
-    @staticmethod
-    def can_piece_reach_target(coord: COORD, board: BOARD, check_color: str = 'w') -> bool:
+    def can_color_reach_target(coord: COORD, board: BOARD, check_color: str = 'w') -> bool:
         ...
 
     @staticmethod
@@ -255,36 +400,44 @@ class chessmenBoardUtility:
         ...
 
     @staticmethod
-    def get_valid_moves(coord: COORD, board: BOARD, get_notation: bool = False) -> Union[List[COORD], List[NOTATION]]:
+    def get_valid_moves(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
         row, col = coord
-        piece, color = board[row][col]
+        board = board_state.board
+        piece = board[row][col].lower()
         if piece == 'p':
-            valid_moves = chessmenBoardUtility.moves_for_pawn(coord, board)
+            valid_moves = chessmenBoardUtility.moves_for_pawn(coord, board_state)
         elif piece == 'n':
-            valid_moves = chessmenBoardUtility.moves_for_knight(coord, board)
+            valid_moves = chessmenBoardUtility.moves_for_knight(coord, board_state)
         elif piece == 'b':
-            valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board)
+            valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board_state)
         elif piece == 'r':
-            valid_moves = chessmenBoardUtility.moves_for_rook(coord, board)
+            valid_moves = chessmenBoardUtility.moves_for_rook(coord, board_state)
         elif piece == 'q':
-            valid_moves = chessmenBoardUtility.moves_for_queen(coord, board)
+            valid_moves = chessmenBoardUtility.moves_for_queen(coord, board_state)
+        elif piece == 'k':
+            valid_moves = chessmenBoardUtility.moves_for_king(coord, board_state)
         else:
-            valid_moves = chessmenBoardUtility.moves_for_king(coord, board)
-        if get_notation:
-            valid_moves = [chessmenBoardUtility.coord2notation(move) for move in valid_moves]
+            valid_moves = []
         return valid_moves
     
     @staticmethod
-    def get_target_moves(valid_moves: Union[List[COORD], List[NOTATION]], board: BOARD, user_color: PIECE_COLOR) -> Union[List[COORD], List[NOTATION]]:
+    def get_target_moves(valid_moves: List[chessmenMove], board_state: chessmenBoardState) -> List[chessmenMove]:
+        board = board_state.board
         target_moves = []
         for move in valid_moves:
-            if isinstance(move, NOTATION):
-                coord = chessmenBoardUtility.notation2coord(move)
-            else:
-                coord = move
-            row, col = coord
-            piece, color = board[row][col]
-            if color != user_color:
+            assert move.start_coord != None
+            if chessmenBoardUtility._is_opposite(move.start_coord, move.target_coord, board):
                 target_moves.append(move)
         return target_moves
 
+if __name__ == '__main__':
+    print(START_FEN)
+    board_state = chessmenBoardUtility.fen2board_state(START_FEN)
+    print(board_state)
+    print(chessmenBoardUtility.board_state2fen(board_state))
+    valid_moves = chessmenBoardUtility.get_valid_moves((7, 1), board_state)
+    print(valid_moves)
+    board_state.update(valid_moves[0])
+    print(board_state)
+    valid_moves = chessmenBoardUtility.get_valid_moves((5, 0), board_state)
+    print(valid_moves)

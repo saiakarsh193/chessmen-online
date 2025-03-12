@@ -5,7 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Literal
 
-from .engine import FEN, START_FEN, PIECE_COLOR
+from .engine import FEN, START_FEN
 from .utils import get_env, string_hash
 
 IP_ADDR, PORT, BUFFER_SIZE, SERVER_HASH = get_env()
@@ -32,13 +32,10 @@ class chessmenMatch:
     white_user_id: str
     black_user_id: str
     fen: FEN = START_FEN
-    turn: PIECE_COLOR = 'white'
 
-    def switch_turn(self) -> None:
-        if self.turn == 'white':
-            self.turn = 'black'
-        else:
-            self.turn = 'white'
+    def check_valid_turn(self, user_id: str) -> bool:
+        user_color = 'w' if user_id == self.white_user_id else 'b'
+        return self.fen.split()[1] == user_color
 
     @staticmethod
     def create_match(user_id_1: str, user_id_2: str) -> 'chessmenMatch':
@@ -51,9 +48,9 @@ class chessmenMatch:
 
 class chessmenServer:
     def __init__(self, server_password: str) -> None:
-        if string_hash(server_password) != SERVER_HASH:
-            print("incorrect server password")
-            exit()
+        # if string_hash(server_password) != SERVER_HASH:
+        #     print("incorrect server password")
+        #     exit()
 
         self.skt = socket.socket()
         self.skt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -130,8 +127,8 @@ class chessmenServer:
                 elif self.users[user_id].status == "in_match":
                     match_id = self.users[user_id].match_id
                     match = self.matches[match_id]
-                    return_args = [match.fen, match.white_user_id, match.black_user_id, match.turn]
-                    return "success", "in_match|" + "|".join(return_args)
+                    return_args = ['in_match', match.fen, match.white_user_id, match.black_user_id, str(int(match.check_valid_turn(user_id)))]
+                    return "success", '|'.join(return_args)
             else:
                 return "error", "user is not online"
         elif request_type == "UPDATE_MATCH":
@@ -141,10 +138,8 @@ class chessmenServer:
                 elif self.users[user_id].status == "in_match":
                     match_id = self.users[user_id].match_id
                     match = self.matches[match_id]
-                    user_color = "white" if match.white_user_id == user_id else "black"
-                    if user_color == match.turn:
+                    if match.check_valid_turn(user_id):
                         match.fen = args[0]
-                        match.switch_turn()
                         return "success", "fen has been updated"
                     else:
                         return "error", "not user turn yet"

@@ -5,7 +5,7 @@ from typing import List, Optional
 from pyglet import image
 from avour import Avour, COORD2FLOAT
 from avour.utils.math import mapper_1d as mapper
-from chessmen import chessmenClient, chessmenBoardUtility as CBU, COORD, BOARD, FEN, PIECE_COLOR
+from chessmen import chessmenClient, chessmenMove, chessmenBoardUtility as CBU, COORD, FEN, PIECE_COLOR
 from chessmen.engine import START_FEN
 
 class chessmenBoard:
@@ -14,8 +14,7 @@ class chessmenBoard:
         self.load_image_data(sheet_path)
         
         # default setup
-        self.set_board(START_FEN, 'white', 'white')
-        self.user_turn = False
+        self.set_board(START_FEN, 'white', False)
         
         # drawing variables
         self.board_size = 650
@@ -38,42 +37,37 @@ class chessmenBoard:
 
         # mouse drag variables
         self.selected_coord: COORD = None
-        self.selected_coord_valid_moves: List[COORD] = []
+        self.valid_moves: List[chessmenMove] = []
     
     def load_image_data(self, path: str) -> None:
         sheet = image.load(path)
-        self.image_color_map = {'b': 'black', 'w': 'white'}
-        self.image_piece_map = {'p': 'pawn', 'r': 'rook', 'n': 'knight', 'b': 'bishop', 'q': 'queen', 'k': 'king'}
         piece_width, piece_height = 130, 130
         self.image_data = {
             'black': {
-                'pawn': sheet.get_region(0, 307, piece_width, piece_height),
-                'rook': sheet.get_region(0, 460, piece_width, piece_height),
-                'knight': sheet.get_region(149, 462, piece_width, piece_height),
-                'bishop': sheet.get_region(297, 465, piece_width, piece_height),
-                'queen': sheet.get_region(445, 465, piece_width, piece_height),
-                'king': sheet.get_region(596, 465, piece_width, piece_height),
+                'p': sheet.get_region(0, 307, piece_width, piece_height), # pawn
+                'r': sheet.get_region(0, 460, piece_width, piece_height), # rook
+                'n': sheet.get_region(149, 462, piece_width, piece_height), # knight
+                'b': sheet.get_region(297, 465, piece_width, piece_height), # bishop
+                'q': sheet.get_region(445, 465, piece_width, piece_height), # queen
+                'k': sheet.get_region(596, 465, piece_width, piece_height), # king
             },
             'white': {
-                'pawn': sheet.get_region(0, 155, piece_width, piece_height),
-                'rook': sheet.get_region(0, 10, piece_width, piece_height),
-                'knight': sheet.get_region(149, 12, piece_width, piece_height),
-                'bishop': sheet.get_region(297, 15, piece_width, piece_height),
-                'queen': sheet.get_region(445, 15, piece_width, piece_height),
-                'king': sheet.get_region(596, 15, piece_width, piece_height),
+                'p': sheet.get_region(0, 155, piece_width, piece_height), # pawn
+                'r': sheet.get_region(0, 10, piece_width, piece_height), # rook
+                'n': sheet.get_region(149, 12, piece_width, piece_height), # knight
+                'b': sheet.get_region(297, 15, piece_width, piece_height), # bishop
+                'q': sheet.get_region(445, 15, piece_width, piece_height), # queen
+                'k': sheet.get_region(596, 15, piece_width, piece_height), # king
             }
         }
     
-    def set_board(self, fen: FEN, user_color: PIECE_COLOR, turn: PIECE_COLOR) -> None:
-        self.board = CBU.convert_fen2board(fen)
+    def set_board(self, fen: FEN, user_color: PIECE_COLOR, user_turn: bool) -> None:
+        self.board_state = CBU.fen2board_state(fen)
         self.user_color = user_color
         self.black_side_view = user_color == 'black'
-        self.user_turn = user_color == turn
+        self.user_turn = user_turn
         self.response_ready = False
 
-    def get_board(self) -> FEN:
-        return CBU.convert_board2fen(self.board)
-    
     def draw_wait_screen(self, avour: Avour) -> None:
         avour.color(self.C_WHITE)
         text = 'waiting for match '
@@ -97,6 +91,7 @@ class chessmenBoard:
             return
 
         # else status is 'in_match': found a match
+        board = self.board_state.board
         # board
         avour.fill(True)
         for row in range(8):
@@ -120,13 +115,15 @@ class chessmenBoard:
                 else:
                     avour.rect(pos, self.tile_size, self.tile_size)
                 if self.black_side_view:
-                    tile = self.board[7 - row][7 - col]
+                    tile = board[7 - row][7 - col]
                 else:
-                    tile = self.board[row][col]
+                    tile = board[row][col]
                 # chess piece
                 if tile != ' ':
-                    piece, color = tile
-                    piece_image = self.image_data[self.image_color_map[color]][self.image_piece_map[piece]]
+                    if tile.isupper():
+                        piece_image = self.image_data['white'][tile.lower()]
+                    else:
+                        piece_image = self.image_data['black'][tile]
                     piece_pos = (
                         pos[0] + 5,
                         pos[1] - 5
@@ -154,16 +151,15 @@ class chessmenBoard:
                     avour.text(self.column_marker[text_col], text_pos, font_size=15, anchor_x='right', anchor_y='bottom')
         
         # valid / target moves
-        for coord in self.selected_coord_valid_moves:
+        for move in self.valid_moves:
+            coord = move.target_coord
             pos = self.coord2pos(coord)
             pos = (
                 pos[0] + self.tile_size / 2,
                 pos[1] - self.tile_size / 2
             )
-            row, col = coord
-            tile = self.board[row][col]
             # valid tile is either empty or opposite piece
-            if tile == ' ':
+            if CBU._is_empty(coord, board):
                 avour.color(self.C_VALID)
                 avour.circle(pos, self.valid_tile_radius)
             # opposite piece is a target move
@@ -189,44 +185,47 @@ class chessmenBoard:
         pos = (coord[1] * self.tile_size, coord[0] * self.tile_size)
         return (pos[0] + self.board_pos[0], -pos[1] + self.board_pos[1])
 
-    def _move_piece_and_update_server(self, coord: COORD) -> None:
+    def _move_piece_and_update_server_response(self, coord: COORD) -> None:
         # check if target location is valid
-        if coord in self.selected_coord_valid_moves:
-            CBU.update_board(self.board, self.selected_coord, coord)
-            # then remove selection
-            self._reset_piece_selection()
-            # then update server
+        selected_move = None
+        for move in self.valid_moves:
+            if move.target_coord == coord:
+                selected_move = move
+        # if valid, update the board and set server response
+        if selected_move != None:
+            self.board_state.update(selected_move)
+            # then update server response
             self.user_turn = False
             self.response_ready = True
+            # then remove selection
+            self._reset_piece_selection()
     
     def _set_piece_selection(self, coord: COORD) -> None:
         self.selected_coord = coord
-        self.selected_coord_valid_moves = CBU.get_valid_moves(coord, self.board)        
+        self.valid_moves = CBU.get_valid_moves(coord, self.board_state)        
 
     def _reset_piece_selection(self) -> None:
         self.selected_coord = None
-        self.selected_coord_valid_moves = []
+        self.valid_moves = []
     
     def on_mousedown(self, pos: COORD2FLOAT) -> None:
         if not self.user_turn:
             return
         if pos[0] >= self.board_pos[0] and pos[0] <= self.board_pos[0] + self.board_size and pos[1] <= self.board_pos[1] and pos[1] >= self.board_pos[1] - self.board_size:
             coord = self.pos2coord(pos)
-            row, col = coord
-            tile = self.board[row][col]
             # if selected tile is empty
-            if tile == ' ':
+            if CBU._is_empty(coord, self.board_state.board):
                 # if piece has already been selected, move it to empty tile
                 if self.selected_coord != None:
-                    self._move_piece_and_update_server(coord)
+                    self._move_piece_and_update_server_response(coord)
                 # otherwise remove selection
                 else:
                     self._reset_piece_selection()
             # if some piece is selected
             else:
-                piece, color = tile
+                color = CBU._get_color(coord, self.board_state.board)
                 # same color
-                if color == self.user_color[0]:
+                if color == self.user_color:
                     # if clicked on the already selected piece, remove selection
                     if coord == self.selected_coord:
                         self._reset_piece_selection()
@@ -237,7 +236,7 @@ class chessmenBoard:
                 else:
                     # if piece has already been selected, move it to opposite piece tile
                     if self.selected_coord != None:
-                        self._move_piece_and_update_server(coord)
+                        self._move_piece_and_update_server_response(coord)
     
     def on_mousedrag(self, pos: COORD2FLOAT) -> None:
         ...
@@ -279,18 +278,20 @@ class chessmenGUI(Avour):
             status, payload = status
             # status: in_queue or in_match
             if status == 'in_match':
-                fen, user_color, turn = payload
-                # if there is a waiting response from user
+                fen, user_color, user_turn = payload
+                # if it is the user's turn
+                # and if there is a waiting response from user
                 # send it to server and clear it
-                if self.board.response_ready:
-                    self.client.update_match(self.board.get_board())
+                if user_turn and self.board.response_ready:
+                    fen = CBU.board_state2fen(self.board.board_state)
+                    self.client.update_match(fen)
                     self.board.response_ready = False
                     return
                 # set board variables (including user_turn, response_ready)
                 self.board.set_board(
                     fen=fen,
                     user_color=user_color,
-                    turn=turn
+                    user_turn=user_turn
                 )
             self.last_status = status
             self.last_status_time = time.time()

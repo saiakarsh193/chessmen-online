@@ -34,16 +34,16 @@ class chessmenClient:
             print(payload)
             return False
 
-    def status_match(self) -> Optional[Tuple[str, Optional[Tuple[FEN, PIECE_COLOR, PIECE_COLOR]]]]:
+    def status_match(self) -> Optional[Tuple[str, Optional[Tuple[FEN, PIECE_COLOR, bool]]]]:
         status, payload = self.request("STATUS_MATCH")
         if status == "success":
             payload = payload.split("|")
             if payload[0] == "in_queue":
                 return payload[0], None
             else:
-                fen, white_user_id, black_user_id, turn = payload[1: ]
-                user_color = "white" if white_user_id == self.user_id else "black"
-                return payload[0], (fen, user_color, turn)
+                fen, white_user_id, black_user_id, user_turn = payload[1: ]
+                user_color = 'white' if white_user_id == self.user_id else 'black'
+                return payload[0], (fen, user_color, bool(int(user_turn)))
         else:
             print(payload)
             return None
