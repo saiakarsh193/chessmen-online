@@ -14,21 +14,22 @@ python3 -m pip install -r requirements.txt
 
 ## Usage
 
-### client side
-To start CLI,
-```bash
-python3 cli.py <username>
+The interface is a server-client design, therefore one system needs to act as a common server. The server system can also host a client if required, but all systems should be on the same LAN (Local Area Network). The `ip_addr` and `port` in `env.yaml` for each system should be set to the IP address and port of the server system.
+
+The env variables are stored in [env.yaml](env.yaml), change them accordingly.
+```yaml
+ip_addr: 10.2.128.150   # IP address of the server
+port: 8001              # port of the server
+buffer_size: 4096       # message buffer size (not required to change)
+server_password: 5d41402abc4b2a76b9719d911017c592 # server password hash (dont change manually)
 ```
 
-![cli_chess](/imgs/cli_chess.png)
-
-To start GUI,
-```bash
-python3 gui.py <username>
-```
-![gui_chess](/imgs/gui_chess.png)
+To get the IP Address:
+- For Linux, use `ip addr`
+- For MACOS, use `ipconfig getsummary en0` (assuming `en0` is the LAN source)
 
 ### server side
+
 ```bash
 # to start server
 python3 backend.py start <password>
@@ -40,14 +41,16 @@ python3 backend.py kill <password>
 python3 backend.py update_pass <password>
 ```
 
-The env variables are stored in [env.yaml](env.yaml), change them accordingly.
-```yaml
-ip_addr: 10.2.128.150
-port: 8001
-buffer_size: 4096
-server_password: 5d41402abc4b2a76b9719d911017c592
-```
+### client side
 
-To get the IP Address:
-- For Linux, use `ip addr`
-- For MACOS, use `ipconfig getsummary en0` (assuming `en0` is the LAN source)
+To start CLI,
+```bash
+python3 cli.py <username>
+```
+![cli_chess](/imgs/cli_chess.png)
+
+To start GUI,
+```bash
+python3 gui.py <username>
+```
+![gui_chess](/imgs/gui_chess.png)
