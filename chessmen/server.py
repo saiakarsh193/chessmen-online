@@ -48,9 +48,9 @@ class chessmenMatch:
 
 class chessmenServer:
     def __init__(self, server_password: str) -> None:
-        # if string_hash(server_password) != SERVER_HASH:
-        #     print("incorrect server password")
-        #     exit()
+        if string_hash(server_password) != SERVER_HASH:
+            print("incorrect server password")
+            exit()
 
         self.skt = socket.socket()
         self.skt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

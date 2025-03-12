@@ -33,18 +33,63 @@ class chessmenBoardState:
     full_moves: int
 
     def update(self, move: chessmenMove) -> None:
+        # check validity of start coord (piece that is moved)
         assert move.start_coord != None
+        assert chessmenBoardUtility._get_color(move.start_coord, self.board) == self.active_color
         # move the main piece
         self.board[move.target_coord[0]][move.target_coord[1]] = self.board[move.start_coord[0]][move.start_coord[1]]
         self.board[move.start_coord[0]][move.start_coord[1]] = ' '
-        # set the flags and update state
-        # move the extra piece (en passant or castling)
+        # handle extra piece (en passant or castling) and set state flags
+        piece = self.board[move.target_coord[0]][move.target_coord[1]].lower()
+        self.update_en_passant_target() # always reset en passant at every move
+        if piece == 'p': # handling en passant
+            if move.move_type == 'enable_en_passant':
+                self.update_en_passant_target(move.extra_coord)
+            else:
+                if move.move_type == 'en_passant': # kill the opponent pawn
+                    self.board[move.extra_coord[0]][move.extra_coord[1]] = ' '
+        elif piece == 'r': # handling castling
+            if move.move_type == 'disable_castling':
+                if 'Q' in self.castling_availability and move.extra_coord == (7, 0):
+                    self.update_castling_availability('Q')
+                elif 'K' in self.castling_availability and move.extra_coord == (7, 7):
+                    self.update_castling_availability('K')
+                elif 'q' in self.castling_availability and move.extra_coord == (0, 0):
+                    self.update_castling_availability('q')
+                elif 'k' in self.castling_availability and move.extra_coord == (0, 7):
+                    self.update_castling_availability('k')
+        elif piece == 'k': # handling castling
+            if move.move_type == 'disable_castling':
+                if ('Q' in self.castling_availability or 'K' in self.castling_availability) and move.extra_coord == (7, 4):
+                    self.update_castling_availability('Q')
+                    self.update_castling_availability('K')
+                elif ('q' in self.castling_availability or 'k' in self.castling_availability) and move.extra_coord == (0, 4):
+                    self.update_castling_availability('q')
+                    self.update_castling_availability('k')
+            if move.move_type == 'castling':
+                if 'Q' in self.castling_availability and move.extra_coord == (7, 3):
+                    self.board[7][0] = ' '
+                    self.board[7][3] = 'R'
+                    self.update_castling_availability('Q')
+                    self.update_castling_availability('K')
+                elif 'K' in self.castling_availability and move.extra_coord == (7, 5):
+                    self.board[7][7] = ' '
+                    self.board[7][5] = 'R'
+                    self.update_castling_availability('Q')
+                    self.update_castling_availability('K')
+                elif 'q' in self.castling_availability and move.extra_coord == (0, 3):
+                    self.board[0][0] = ' '
+                    self.board[0][3] = 'r'
+                    self.update_castling_availability('q')
+                    self.update_castling_availability('k')
+                elif 'k' in self.castling_availability and move.extra_coord == (0, 5):
+                    self.board[0][7] = ' '
+                    self.board[0][5] = 'r'
+                    self.update_castling_availability('q')
+                    self.update_castling_availability('k')
+
         # switch the active color
         self.switch_active_color()
-
-    def update_board(self, st_coord: COORD, en_coord: COORD) -> None:
-        self.board[en_coord[0]][en_coord[1]] = self.board[st_coord[0]][st_coord[1]]
-        self.board[st_coord[0]][st_coord[1]] = ' '
 
     def switch_active_color(self) -> None:
         self.active_color = 'black' if self.active_color == 'white' else 'white'
@@ -59,8 +104,13 @@ class chessmenBoardState:
             castling_availability = ['-']
         self.castling_availability = ''.join(castling_availability)
 
-    def update_en_passant_target(self, pos: Optional[NOTATION] = None) -> None:
-        self.en_passant_target = '-' if pos == None else pos
+    def update_en_passant_target(self, pos: Optional[Union[NOTATION, COORD]] = None) -> None:
+        if pos == None:
+            self.en_passant_target = '-'
+        else:
+            if not isinstance(pos, NOTATION):
+                pos = chessmenBoardUtility.coord2notation(pos)
+            self.en_passant_target = pos
 
 class chessmenBoardUtility:
     @staticmethod
@@ -294,23 +344,6 @@ class chessmenBoardUtility:
         return valid_moves
     
     @staticmethod
-    def _get_castling_move(color: PIECE_COLOR, board: BOARD, queen_side: bool = True) -> Optional[chessmenMove]:
-        row = 7 if color == 'white' else 0
-        cols = [0, 1, 2, 3, 4] if queen_side else [4, 5, 6, 7]
-        for i, col in enumerate(cols):
-            # all cols between rook and king should be empty
-            if i > 0 and i < len(cols) - 1:
-                if not chessmenBoardUtility._is_empty((row, col), board):
-                    return None
-            # check (row, col) should not be under check
-            pass
-        # only king can initiate castling
-        if queen_side:
-            return chessmenMove((row, 2), move_type='castling', extra_coord=(row, 3))
-        else:
-            return chessmenMove((row, 6), move_type='castling', extra_coord=(row, 5))
-    
-    @staticmethod
     def moves_for_rook(coord: COORD, board_state: chessmenBoardState, for_queen: bool = False) -> List[chessmenMove]:
         row, col = coord
         board = board_state.board
@@ -336,6 +369,23 @@ class chessmenBoardUtility:
         valid_moves = chessmenBoardUtility.moves_for_bishop(coord, board_state)
         valid_moves += chessmenBoardUtility.moves_for_rook(coord, board_state, for_queen=True)
         return valid_moves
+    
+    @staticmethod
+    def _get_castling_move(color: PIECE_COLOR, board: BOARD, queen_side: bool = True) -> Optional[chessmenMove]:
+        row = 7 if color == 'white' else 0
+        cols = [0, 1, 2, 3, 4] if queen_side else [4, 5, 6, 7]
+        for i, col in enumerate(cols):
+            # all cols between rook and king should be empty
+            if i > 0 and i < len(cols) - 1:
+                if not chessmenBoardUtility._is_empty((row, col), board):
+                    return None
+            # check (row, col) should not be under check
+            pass
+        # only king can initiate castling
+        if queen_side:
+            return chessmenMove((row, 2), move_type='castling', extra_coord=(row, 3))
+        else:
+            return chessmenMove((row, 6), move_type='castling', extra_coord=(row, 5))
     
     @staticmethod
     def moves_for_king(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
