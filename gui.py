@@ -1,20 +1,20 @@
 import time
 import argparse
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 
 from pyglet import image
-from avour import Avour, COORD2FLOAT
+from avour import Avour, COORD2FLOAT, COORD2INT
 from avour.utils.vector import Vector2D
 from avour.utils.math import mapper_1d as mapper
 from chessmen import chessmenClient, chessmenMove, chessmenBoardUtility as CBU, COORD, FEN, PIECE_COLOR, START_FEN
 
 class chessmenBoard:
-    def __init__(self, user_id: str, sheet_path: str = 'imgs/piece_sheet.png') -> None:
-        self.user_id = user_id
+    def __init__(self, screen_size: COORD2INT, sheet_path: str = 'imgs/piece_sheet.png') -> None:
+        self.screen_size = screen_size
         self.load_image_data(sheet_path)
         
         # default setup
-        self.set_board(START_FEN, 'white', False)
+        self.set_board(START_FEN, ('player_white', 'player_black'), 'white', False)
         
         # drawing variables
         self.board_size = 650
@@ -45,26 +45,25 @@ class chessmenBoard:
         sheet = image.load(path)
         self.piece_width, self.piece_height = 130, 130
         self.image_data = {
-            'black': {
-                'p': sheet.get_region(0, 307, self.piece_width, self.piece_height), # pawn
-                'r': sheet.get_region(0, 460, self.piece_width, self.piece_height), # rook
-                'n': sheet.get_region(149, 462, self.piece_width, self.piece_height), # knight
-                'b': sheet.get_region(297, 465, self.piece_width, self.piece_height), # bishop
-                'q': sheet.get_region(445, 465, self.piece_width, self.piece_height), # queen
-                'k': sheet.get_region(596, 465, self.piece_width, self.piece_height), # king
-            },
-            'white': {
-                'p': sheet.get_region(0, 155, self.piece_width, self.piece_height), # pawn
-                'r': sheet.get_region(0, 10, self.piece_width, self.piece_height), # rook
-                'n': sheet.get_region(149, 12, self.piece_width, self.piece_height), # knight
-                'b': sheet.get_region(297, 15, self.piece_width, self.piece_height), # bishop
-                'q': sheet.get_region(445, 15, self.piece_width, self.piece_height), # queen
-                'k': sheet.get_region(596, 15, self.piece_width, self.piece_height), # king
-            }
+            # black
+            'p': sheet.get_region(0, 307, self.piece_width, self.piece_height), # pawn
+            'r': sheet.get_region(0, 460, self.piece_width, self.piece_height), # rook
+            'n': sheet.get_region(149, 462, self.piece_width, self.piece_height), # knight
+            'b': sheet.get_region(297, 465, self.piece_width, self.piece_height), # bishop
+            'q': sheet.get_region(445, 465, self.piece_width, self.piece_height), # queen
+            'k': sheet.get_region(596, 465, self.piece_width, self.piece_height), # king
+            # white
+            'P': sheet.get_region(0, 155, self.piece_width, self.piece_height), # pawn
+            'R': sheet.get_region(0, 10, self.piece_width, self.piece_height), # rook
+            'N': sheet.get_region(149, 12, self.piece_width, self.piece_height), # knight
+            'B': sheet.get_region(297, 15, self.piece_width, self.piece_height), # bishop
+            'Q': sheet.get_region(445, 15, self.piece_width, self.piece_height), # queen
+            'K': sheet.get_region(596, 15, self.piece_width, self.piece_height), # king
         }
     
-    def set_board(self, fen: FEN, user_color: PIECE_COLOR, user_turn: bool) -> None:
+    def set_board(self, fen: FEN, users: Tuple[str, str], user_color: PIECE_COLOR, user_turn: bool) -> None:
         self.board_state = CBU.fen2board_state(fen)
+        self.users = users
         self.user_color = user_color
         self.black_side_view = user_color == 'black'
         self.user_turn = user_turn
@@ -104,10 +103,7 @@ class chessmenBoard:
                 ignore_selected_coord = True # dont redraw tile in grid
                 tile = board[self.selected_coord[0]][self.selected_coord[1]]
                 if tile != ' ':
-                    if tile.isupper():
-                        piece_image = self.image_data['white'][tile.lower()]
-                    else:
-                        piece_image = self.image_data['black'][tile]
+                    piece_image = self.image_data[tile]
                     piece_pos = (
                         self.mouse_drag_current[0] - self.piece_width / 4,
                         self.mouse_drag_current[1] + self.piece_height / 4
@@ -144,10 +140,7 @@ class chessmenBoard:
                 # chess piece
                 if tile != ' ':
                     if not (ignore_selected_coord and self.selected_coord == (drow, dcol)): # if in drag mode, ignore piece
-                        if tile.isupper():
-                            piece_image = self.image_data['white'][tile.lower()]
-                        else:
-                            piece_image = self.image_data['black'][tile]
+                        piece_image = self.image_data[tile]
                         piece_pos = (
                             pos[0] + 5,
                             pos[1] - 5
@@ -193,6 +186,65 @@ class chessmenBoard:
                 avour.thickness(self.valid_tile_radius - self.target_tile_radius)
                 avour.circle(pos, self.valid_tile_radius)
                 avour.fill(True)
+
+        self.draw_user_meta(avour)
+
+    def draw_user_meta(self, avour: Avour) -> None:
+        # meta info
+        avour.color(self.C_WHITE)
+        pos = (
+            -self.screen_size[0] / 2 + 60,
+            self.screen_size[1] / 2 - 40
+        )
+        avour.text(self.users[0], pos, anchor_x='left', anchor_y='center')
+        pos = (
+            pos[0] - 20,
+            pos[1] - 30
+        )
+        missing_pieces = CBU.get_missing_pieces(self.board_state, self.user_color)
+        self.draw_missing_pieces(avour, pos, missing_pieces)
+
+        pos = (
+            self.screen_size[0] / 2 - 60,
+            self.screen_size[1] / 2 - 40
+        )
+        avour.text(self.users[1], pos, anchor_x='right', anchor_y='center')
+        pos = (
+            pos[0] - 20 - avour._text_width(self.users[1]),
+            pos[1] - 30
+        )
+        missing_pieces = CBU.get_missing_pieces(self.board_state, 'black' if self.user_color == 'white' else 'white')
+        self.draw_missing_pieces(avour, pos, missing_pieces)
+
+        # color dot
+        avour.color(self.C_GREEN)
+        if self.user_turn:
+            cpos = (
+                -self.screen_size[0] / 2 + 30,
+                self.screen_size[1] / 2 - 40
+            )
+        else:
+            cpos = (
+                self.screen_size[0] / 2 - 30,
+                self.screen_size[1] / 2 - 40
+            )
+        avour.circle(cpos, 15)
+
+    def draw_missing_pieces(self, avour: Avour, pos: COORD2FLOAT, pieces: Dict[str, int]) -> None:
+        scale = 0.25
+        hsep = 22
+        vsep = 28
+        max_count_per_row = 8
+        tcount = 0
+        cpos = (pos[0], pos[1])
+        for piece, count in pieces.items():
+            if tcount <= max_count_per_row and tcount + count > max_count_per_row:
+                cpos = (pos[0], cpos[1] - vsep)
+            tcount += count
+            piece_image = self.image_data[piece]
+            for _ in range(count):
+                avour.sprite(piece_image, cpos, scale=scale)
+                cpos = (cpos[0] + hsep, cpos[1])
 
     def pos2coord(self, pos: COORD2FLOAT) -> COORD:
         # x axis is col, y axis is row
@@ -284,7 +336,7 @@ class chessmenGUILocal(Avour):
         screen_size = self.get_screen_size()
         self.translate((screen_size[0] / 2, screen_size[1] / 2))
         
-        self.board = chessmenBoard(user_id='')
+        self.board = chessmenBoard(screen_size)
         self.board.user_turn = True
 
     def on_keydown(self, key: str) -> None:
@@ -307,6 +359,7 @@ class chessmenGUILocal(Avour):
         # if there is a waiting response from user
         if self.board.response_ready:
             self.board.user_color = self.board.board_state.active_color
+            self.board.users = (self.board.users[1], self.board.users[0])
             self.board.black_side_view = self.board.user_color == 'black'
             self.board.user_turn = True
             self.board.response_ready = False
@@ -321,7 +374,7 @@ class chessmenGUI(Avour):
         self.translate((screen_size[0] / 2, screen_size[1] / 2))
         
         self.client = chessmenClient(user_id=user_id)
-        self.board = chessmenBoard(user_id=self.client.user_id)
+        self.board = chessmenBoard(screen_size)
         assert self.client.find_match()
 
         self.last_status = None
@@ -351,7 +404,7 @@ class chessmenGUI(Avour):
             status, payload = status
             # status: in_queue or in_match
             if status == 'in_match':
-                fen, user_color, user_turn = payload
+                fen, users, user_color, user_turn = payload
                 # if it is the user's turn
                 # and if there is a waiting response from user
                 # send it to server and clear it
@@ -363,6 +416,7 @@ class chessmenGUI(Avour):
                 # set board variables (including user_turn, response_ready)
                 self.board.set_board(
                     fen=fen,
+                    users=users,
                     user_color=user_color,
                     user_turn=user_turn
                 )

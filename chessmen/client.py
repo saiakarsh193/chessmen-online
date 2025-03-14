@@ -34,7 +34,7 @@ class chessmenClient:
             print(payload)
             return False
 
-    def status_match(self) -> Optional[Tuple[str, Optional[Tuple[FEN, PIECE_COLOR, bool]]]]:
+    def status_match(self) -> Optional[Tuple[str, Optional[Tuple[FEN, Tuple[str, str], PIECE_COLOR, bool]]]]:
         status, payload = self.request("STATUS_MATCH")
         if status == "success":
             payload = payload.split("|")
@@ -43,7 +43,8 @@ class chessmenClient:
             else:
                 fen, white_user_id, black_user_id, user_turn = payload[1: ]
                 user_color = 'white' if white_user_id == self.user_id else 'black'
-                return payload[0], (fen, user_color, bool(int(user_turn)))
+                users = (white_user_id, black_user_id) if user_color == 'white' else (black_user_id, white_user_id)
+                return payload[0], (fen, users, user_color, bool(int(user_turn)))
         else:
             print(payload)
             return None

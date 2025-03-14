@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Literal, Union, Callable
+from typing import List, Tuple, Optional, Literal, Union, Dict, Callable
 
 FEN = str
 BOARD = List[List[str]]
@@ -479,6 +479,25 @@ class chessmenBoardUtility:
             if chessmenBoardUtility._is_opposite(move.start_coord, move.target_coord, board):
                 target_moves.append(move)
         return target_moves
+
+    @staticmethod
+    def get_missing_pieces(board_state: chessmenBoardState, user_color: PIECE_COLOR) -> Dict[str, int]:
+        if user_color == 'white':
+            missing_pieces = {'P': 0, 'R': 0, 'N': 0, 'B': 0, 'Q': 0, 'K': 0}
+        else:
+            missing_pieces = {'p': 0, 'r': 0, 'n': 0, 'b': 0, 'q': 0, 'k': 0}
+        for row in board_state.board:
+            for col in row:
+                if col in missing_pieces:
+                    missing_pieces[col] += 1
+        for piece in missing_pieces:
+            if piece.lower() == 'p':
+                missing_pieces[piece] = 8 - missing_pieces[piece]
+            elif piece.lower() in ['r', 'n', 'b']:
+                missing_pieces[piece] = 2 - missing_pieces[piece]
+            else:
+                missing_pieces[piece] = 1 - missing_pieces[piece]
+        return {piece: val for piece, val in missing_pieces.items() if val > 0}
 
 if __name__ == '__main__':
     print(START_FEN)

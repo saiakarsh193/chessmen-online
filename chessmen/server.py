@@ -68,7 +68,7 @@ class chessmenServer:
         users_in_queue = []
         for user_id, user in self.users.items():
             if user.time_since_last_ping() >= USER_MAX_IDLE_TIME: # user crosses idle time
-                if user.status == "in_match": # remove match, and both users
+                if user.status == "in_match" and not user in users_to_remove: # remove match, and both users (if already not added)
                     match = self.matches[user.match_id]
                     users_to_remove.append(match.white_user_id)
                     users_to_remove.append(match.black_user_id)

@@ -97,7 +97,7 @@ class chessmenCLI:
             status, payload = status
             # status: in_queue or in_match
             if status == 'in_match':
-                fen, user_color, user_turn = payload
+                fen, users, user_color, user_turn = payload
                 board_state = CBU.fen2board_state(fen)
                 display_board(board_state, black_side_view=(user_color == 'black'), flush=True)
                 if user_turn:
