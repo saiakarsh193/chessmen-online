@@ -110,7 +110,7 @@ class chessmenCLI:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='chessmen client CLI interface')
-    parser.add_argument('user_id', help='username for client', type=str)
+    parser.add_argument('--user_id', help='username for client', type=str, default=None)
     parser.add_argument('--local', help='play local match', action='store_true')
     args = parser.parse_args()
 

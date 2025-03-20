@@ -1,6 +1,6 @@
 # Chessmen-Online
 
-Multiplayer chess that two players can play over LAN. Supports both CLI based and [Avour](https://github.com/saiakarsh193/avour) GUI based gameplay. Use CLI for simple old-school terminal based interface. Use GUI for a more modern interactive interface. Checkout [git submodule](https://github.blog/open-source/git/working-with-submodules/) for more info on recursive cloning.
+Chessmen Online is a multiplayer chess platform where two players can play each other over a LAN. It supports both CLI based and [Avour](https://github.com/saiakarsh193/avour) GUI based gameplay. Use CLI for simple old-school terminal based interface. Use GUI for a more modern interactive interface. Checkout [git submodule](https://github.blog/open-source/git/working-with-submodules/) for more info on recursive cloning.
 
 > The sprites and GUI were taken and inspired by [chess.com](https://www.chess.com/).  
 
@@ -14,7 +14,7 @@ python3 -m pip install -r requirements.txt
 
 ## Usage
 
-The interface is a server-client design, therefore one system needs to act as a common server. The server system can also host a client if required, but all systems should be on the same LAN (Local Area Network). The `ip_addr` and `port` in `env.yaml` for each system should be set to the IP address and port of the server system.
+The network interface is a simple server-client setup. Therefore one system needs to act as a common server (this server system can also host a client if required). All systems should be on the same LAN (Local Area Network) to be able to communicate with each other. The `ip_addr` and `port` in `env.yaml` for each system should be set to the IP address and port of the server system.
 
 The env variables are stored in [env.yaml](env.yaml), change them accordingly.
 ```yaml
@@ -45,12 +45,25 @@ python3 backend.py update_pass <password>
 
 To start CLI,
 ```bash
-python3 cli.py <username>
+python3 cli.py --user_id <username>
+
+# for local multiplayer
+python3 cli.py --local
 ```
 ![cli_chess](/imgs/cli_chess.png)
 
 To start GUI,
 ```bash
-python3 gui.py <username>
+python3 gui.py --user_id <username>
+
+# for local multiplayer
+python3 gui.py --local
 ```
 ![gui_chess](/imgs/gui_chess.png)
+
+### Issues
+- To fix mouse click issue in Mac: [[171]](https://github.com/pyglet/pyglet/issues/171)
+  ```python
+    import pyglet
+    pyglet.options['osx_alt_loop'] = True
+  ```

@@ -2,6 +2,8 @@ import time
 import argparse
 from typing import List, Optional, Tuple, Dict
 
+import pyglet
+pyglet.options['osx_alt_loop'] = True
 from pyglet import image
 from avour import Avour, COORD2FLOAT, COORD2INT
 from avour.utils.vector import Vector2D
@@ -425,7 +427,7 @@ class chessmenGUI(Avour):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='chessmen client GUI interface')
-    parser.add_argument('user_id', help='username for client', type=str)
+    parser.add_argument('--user_id', help='username for client', type=str, default=None)
     parser.add_argument('--local', help='play local match', action='store_true')
     args = parser.parse_args()
 
