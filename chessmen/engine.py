@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, Literal, Union, Dict, Callable
 
@@ -249,7 +250,9 @@ class chessmenBoardUtility:
         is_empty = lambda r, c: chessmenBoardUtility._is_empty((r, c), board)
         is_opposite = lambda r, c: chessmenBoardUtility._is_opposite(coord, (r, c), board)
         valid_moves: List[chessmenMove] = []
-        if get_color(row, col) == 'white':
+        get_color = lambda r, c: chessmenBoardUtility._get_color((r, c), board)
+        color = get_color(row, col)
+        if color == 'white':
             if row == 6 and is_empty(row - 1, col) and is_empty(row - 2, col): # first double move -> enable en passant
                 valid_moves.append(chessmenMove((row - 2, col), move_type='enable_en_passant', extra_coord=(row - 1, col)))
             if board_state.en_passant_target != '-' and row == 3: # possible en passant
@@ -371,16 +374,18 @@ class chessmenBoardUtility:
         return valid_moves
     
     @staticmethod
-    def _get_castling_move(color: PIECE_COLOR, board: BOARD, queen_side: bool = True) -> Optional[chessmenMove]:
+    def _get_castling_move(color: PIECE_COLOR, board_state: chessmenBoardState, queen_side: bool = True) -> Optional[chessmenMove]:
+        board = board_state.board
         row = 7 if color == 'white' else 0
         cols = [0, 1, 2, 3, 4] if queen_side else [4, 5, 6, 7]
         for i, col in enumerate(cols):
-            # all cols between rook and king should be empty
+            # all tiles between rook and king (exclusive) should be empty
             if i > 0 and i < len(cols) - 1:
                 if not chessmenBoardUtility._is_empty((row, col), board):
                     return None
-            # check (row, col) should not be under check
-            pass
+            # all tiles between rook and king (inclusive) should not be under check
+            if chessmenBoardUtility.can_color_reach_location((row, col), board_state, color):
+                return None
         # only king can initiate castling
         if queen_side:
             return chessmenMove((row, 2), move_type='castling', extra_coord=(row, 3))
@@ -388,7 +393,7 @@ class chessmenBoardUtility:
             return chessmenMove((row, 6), move_type='castling', extra_coord=(row, 5))
     
     @staticmethod
-    def moves_for_king(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
+    def moves_for_king(coord: COORD, board_state: chessmenBoardState, check_castling: bool = True) -> List[chessmenMove]:
         row, col = coord
         board = board_state.board
         is_inside = lambda r, c: chessmenBoardUtility._is_inside((r, c))
@@ -416,38 +421,85 @@ class chessmenBoardUtility:
             move.move_type = 'disable_castling'
             move.extra_coord = (row, col)
         # for castling
-        get_color = lambda r, c: chessmenBoardUtility._get_color((r, c), board)
-        color = get_color(row, col)
-        if color == 'white':
-            if 'Q' in board_state.castling_availability:
-                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=True)
-                if move != None:
-                    valid_moves.append(move)
-            if 'K' in board_state.castling_availability:
-                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=False)
-                if move != None:
-                    valid_moves.append(move)
-        else:
-            if 'q' in board_state.castling_availability:
-                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=True)
-                if move != None:
-                    valid_moves.append(move)
-            if 'k' in board_state.castling_availability:
-                move = chessmenBoardUtility._get_castling_move(color, board, queen_side=False)
-                if move != None:
-                    valid_moves.append(move)
+        if check_castling:
+            get_color = lambda r, c: chessmenBoardUtility._get_color((r, c), board)
+            color = get_color(row, col)
+            if color == 'white':
+                if 'Q' in board_state.castling_availability:
+                    move = chessmenBoardUtility._get_castling_move(color, board_state, queen_side=True)
+                    if move != None:
+                        valid_moves.append(move)
+                if 'K' in board_state.castling_availability:
+                    move = chessmenBoardUtility._get_castling_move(color, board_state, queen_side=False)
+                    if move != None:
+                        valid_moves.append(move)
+            else:
+                if 'q' in board_state.castling_availability:
+                    move = chessmenBoardUtility._get_castling_move(color, board_state, queen_side=True)
+                    if move != None:
+                        valid_moves.append(move)
+                if 'k' in board_state.castling_availability:
+                    move = chessmenBoardUtility._get_castling_move(color, board_state, queen_side=False)
+                    if move != None:
+                        valid_moves.append(move)
         for move in valid_moves:
             move.start_coord = (row, col)
         return valid_moves
     
     @staticmethod
-    def can_color_reach_target(coord: COORD, board: BOARD, check_color: str = 'w') -> bool:
-        ...
+    def can_color_reach_location(coord: COORD, board_state: chessmenBoardState, target_color: PIECE_COLOR = 'white') -> bool:
+        opposite_color = 'black' if target_color == 'white' else 'white'
+        # we do reverse check, based on reversibilty of active attack
+        # by putting each piece in the coord and checking possible positions
+        target_moves = []
+        original_tile = board_state.board[coord[0]][coord[1]]
+        board_state.board[coord[0]][coord[1]] = 'P' if target_color == 'white' else 'p'
+        for move in chessmenBoardUtility.moves_for_pawn(coord, board_state):
+            if move.move_type == 'normal' and chessmenBoardUtility._get_color(move.target_coord, board_state.board) == opposite_color and board_state.board[move.target_coord[0]][move.target_coord[1]].lower() == 'p':
+                target_moves.append(move)
+        board_state.board[coord[0]][coord[1]] = 'N' if target_color == 'white' else 'n'
+        for move in chessmenBoardUtility.moves_for_knight(coord, board_state):
+            if move.move_type == 'normal' and chessmenBoardUtility._get_color(move.target_coord, board_state.board) == opposite_color and board_state.board[move.target_coord[0]][move.target_coord[1]].lower() == 'n':
+                target_moves.append(move)
+        board_state.board[coord[0]][coord[1]] = 'B' if target_color == 'white' else 'b'
+        for move in chessmenBoardUtility.moves_for_bishop(coord, board_state):
+            if move.move_type == 'normal' and chessmenBoardUtility._get_color(move.target_coord, board_state.board) == opposite_color and board_state.board[move.target_coord[0]][move.target_coord[1]].lower() in ['b', 'q']:
+                target_moves.append(move)
+        board_state.board[coord[0]][coord[1]] = 'R' if target_color == 'white' else 'r'
+        for move in chessmenBoardUtility.moves_for_rook(coord, board_state):
+            if move.move_type == 'normal' and chessmenBoardUtility._get_color(move.target_coord, board_state.board) == opposite_color and board_state.board[move.target_coord[0]][move.target_coord[1]].lower() in ['r', 'q']:
+                target_moves.append(move)
+        board_state.board[coord[0]][coord[1]] = 'K' if target_color == 'white' else 'k'
+        for move in chessmenBoardUtility.moves_for_king(coord, board_state, check_castling=False):
+            if move.move_type == 'normal' and chessmenBoardUtility._get_color(move.target_coord, board_state.board) == opposite_color and board_state.board[move.target_coord[0]][move.target_coord[1]].lower() == 'k':
+                target_moves.append(move)
+        board_state.board[coord[0]][coord[1]] = original_tile
+        return len(target_moves) > 0
 
     @staticmethod
-    def filter_moves_on_king_check(moves: List[COORD], board: BOARD, check_color: str = 'w') -> List[COORD]:
+    def filter_moves_on_king_check(moves: List[chessmenMove], board_state: chessmenBoardState, target_color: PIECE_COLOR = 'white') -> List[chessmenMove]:
+        def get_king_location(board_state: chessmenBoardState, color: PIECE_COLOR) -> COORD:
+            target = 'K' if color == 'white' else 'k'
+            for row in range(8):
+                for col in range(8):
+                    if board_state.board[row][col] == target:
+                        return row, col
+        def updated_board_state(board_state: chessmenBoardState, move: chessmenMove) -> chessmenBoardState:
+            board_state = deepcopy(board_state)
+            board_state.update(move)
+            return board_state
         valid_moves = []
-        ...
+        # a move is valid, only if the king is not on check after making it
+        for move in moves:
+            # how will the board look after making that move
+            new_board_state = updated_board_state(board_state, move)
+            king_pos = get_king_location(new_board_state, target_color)
+            # verify in the new state if it is a check
+            king_check = chessmenBoardUtility.can_color_reach_location(king_pos, new_board_state, target_color)
+            if not king_check:
+                valid_moves.append(move)
+        # if no moves possible, game over
+        return valid_moves
 
     @staticmethod
     def get_valid_moves(coord: COORD, board_state: chessmenBoardState) -> List[chessmenMove]:
@@ -468,6 +520,9 @@ class chessmenBoardUtility:
             valid_moves = chessmenBoardUtility.moves_for_king(coord, board_state)
         else:
             valid_moves = []
+        color = chessmenBoardUtility._get_color(coord, board)
+        if color != None:
+            valid_moves = chessmenBoardUtility.filter_moves_on_king_check(valid_moves, board_state, color)
         return valid_moves
     
     @staticmethod
